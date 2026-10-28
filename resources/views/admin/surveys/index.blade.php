@@ -7,7 +7,7 @@
                 <div class="mentea-stat"><div class="mentea-stat-label">Promedio</div><div class="mentea-stat-value">{{ $avg ? number_format($avg, 1) : '—' }} / 5</div></div>
                 <div class="mentea-stat"><div class="mentea-stat-label">Pendientes (30 d)</div><div class="mentea-stat-value">{{ $pending }}</div></div>
             </div>
-            <div class="mentea-card overflow-hidden">
+            <div class="mentea-card overflow-x-auto">
                 <table class="mentea-table">
                     <thead>
                         <tr><th>Fecha</th><th>Paciente</th><th>Profesional</th><th>Nota</th><th>Comentario</th></tr>
@@ -22,7 +22,12 @@
                                 <td class="text-sm text-slate-600">{{ $s->comment }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="5" class="text-center py-8 text-slate-500">Sin encuestas aún.</td></tr>
+                            <tr><td colspan="5">
+                                <div class="mentea-empty-state">
+                                    <x-icon name="chart" class="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                                    <p>Sin encuestas aún.</p>
+                                </div>
+                            </td></tr>
                         @endforelse
                     </tbody>
                 </table>
