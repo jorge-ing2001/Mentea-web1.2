@@ -1,41 +1,44 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex justify-between items-center flex-wrap gap-2">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Notificaciones</h2>
+            <h2 class="mentea-page-title">Notificaciones</h2>
             @if(Auth::user()->unreadNotifications->isNotEmpty())
                 <form method="POST" action="{{ route('notifications.read-all') }}">
                     @csrf
-                    <button type="submit" class="text-sm text-teal-600 hover:underline">Marcar todas como leídas</button>
+                    <button type="submit" class="btn-mentea-ghost">Marcar todas como leídas</button>
                 </form>
             @endif
         </div>
     </x-slot>
-    <div class="py-8">
-        <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
-            @if(session('success'))
-                <div class="mb-4 p-3 bg-green-100 text-green-800 rounded-lg text-sm">{{ session('success') }}</div>
-            @endif
-            <div class="bg-white rounded-xl shadow-sm border divide-y">
-                @forelse($notifications as $n)
-                    @php $data = $n->data; @endphp
-                    <a href="{{ route('notifications.read', $n->id) }}"
-                       class="block px-5 py-4 hover:bg-gray-50 transition {{ $n->read_at ? 'opacity-70' : 'bg-teal-50/40' }}">
-                        <div class="flex justify-between gap-3">
-                            <div>
-                                <div class="font-medium text-sm text-gray-900">{{ $data['title'] ?? 'Aviso' }}</div>
-                                <div class="text-sm text-gray-600 mt-0.5">{{ $data['body'] ?? '' }}</div>
-                                <div class="text-xs text-gray-400 mt-1">{{ $n->created_at->diffForHumans() }}</div>
-                            </div>
-                            @unless($n->read_at)
-                                <span class="shrink-0 w-2 h-2 mt-2 rounded-full bg-teal-500"></span>
-                            @endunless
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        @if(session('success'))
+            <div class="alert-success text-sm">{{ session('success') }}</div>
+        @endif
+
+        <div class="mentea-card divide-y divide-slate-100 overflow-hidden">
+            @forelse($notifications as $n)
+                @php $data = $n->data; @endphp
+                <a href="{{ route('notifications.read', $n->id) }}"
+                   class="block px-5 py-4 transition hover:bg-slate-50 focus:outline-none focus:bg-mentea-50 {{ $n->read_at ? '' : 'bg-mentea-50/50' }}">
+                    <div class="flex justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-medium text-sm {{ $n->read_at ? 'text-slate-700' : 'text-slate-900' }}">{{ $data['title'] ?? 'Aviso' }}</div>
+                            <div class="text-sm text-slate-600 mt-0.5">{{ $data['body'] ?? '' }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ $n->created_at->diffForHumans() }}</div>
                         </div>
-                    </a>
-                @empty
-                    <div class="px-5 py-10 text-center text-gray-500 text-sm">No tienes notificaciones.</div>
-                @endforelse
-            </div>
-            <div class="mt-4">{{ $notifications->links() }}</div>
+                        @unless($n->read_at)
+                            <span class="shrink-0 w-2.5 h-2.5 mt-1.5 rounded-full bg-mentea-500" aria-label="No leída"></span>
+                        @endunless
+                    </div>
+                </a>
+            @empty
+                <div class="mentea-empty-state">
+                    <x-icon name="bell" class="w-10 h-10 text-slate-300" />
+                    <p class="text-sm">No tienes notificaciones.</p>
+                </div>
+            @endforelse
         </div>
+
+        <div>{{ $notifications->links() }}</div>
     </div>
 </x-app-layout>
