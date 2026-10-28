@@ -3,9 +3,9 @@
         <div class="flex justify-between h-16">
             <div class="flex">
                 <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}" class="flex items-center gap-2 group">
-                        <img src="{{ asset('images/brand/logo-symbol.svg') }}" alt="Mentea" class="h-9 w-9">
-                        <span class="hidden sm:inline mentea-brand-wordmark" style="font-size:1.05rem;">MENTEA</span>
+                    <a href="{{ route('dashboard') }}" class="flex items-center group">
+                        <img src="{{ asset('images/brand/logo-horizontal-claro.png') }}" alt="Mentea" class="mentea-logo-light h-9 w-auto object-contain">
+                        <img src="{{ asset('images/brand/logo-horizontal-oscuro.png') }}" alt="Mentea" class="mentea-logo-dark h-9 w-auto object-contain">
                     </a>
                 </div>
                 <div class="hidden space-x-6 sm:-my-px sm:ms-10 sm:flex items-center">

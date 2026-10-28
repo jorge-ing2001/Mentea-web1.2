@@ -66,6 +66,12 @@ body {
   top: 0;
   z-index: 30;
 }
+
+/* Logo horizontal de marca: variante legible por superficie.
+   claro = tinta oscura (lee en header claro) · oscuro = tinta clara (lee en header oscuro) */
+.mentea-logo-dark { display: none; }
+html.dark .mentea-logo-light { display: none; }
+html.dark .mentea-logo-dark { display: inline-block; }
 .mentea-page-title {
   font-family: var(--font-display);
   font-size: 1.35rem;

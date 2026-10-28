@@ -15,12 +15,8 @@
     <header class="mentea-header">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <a href="/" class="flex items-center gap-2 group" aria-label="Mentea — inicio">
-                <img src="{{ asset('images/brand/logo-symbol.svg') }}" alt="Mentea" class="h-10 w-10"
-                     onerror="this.src='{{ asset('images/brand/logo-symbol.png') }}'">
-                <div class="leading-tight">
-                    <div class="mentea-brand-wordmark text-lg" style="font-size:1.15rem;">MENTEA</div>
-                    <div class="text-[10px] text-mentea-600 hidden sm:block">Conecta con tu bienestar mental</div>
-                </div>
+                <img src="{{ asset('images/brand/logo-horizontal-claro.png') }}" alt="Mentea" class="h-10 w-auto object-contain">
+                <span class="text-[10px] text-mentea-600 hidden lg:block">Conecta con tu bienestar mental</span>
             </a>
             <nav class="flex items-center gap-2 text-sm" aria-label="Acceso">
                 @auth
@@ -59,9 +55,10 @@
                     </div>
                 </div>
                 <div class="hidden md:flex justify-center">
-                    <img src="{{ asset('images/brand/logo-principal-oscuro.png') }}"
+                    <img src="{{ asset('images/brand/logo-principal-claro.png') }}"
                          alt="Mentea logo"
-                         class="max-h-72 w-auto object-contain drop-shadow-xl rounded-2xl">
+                         class="max-h-72 w-auto object-contain drop-shadow-xl">
+
                 </div>
             </div>
         </section>
