@@ -58,7 +58,11 @@
                     </div>
                 @endif
 
-                <div class="flex flex-wrap gap-3 pt-5 border-t border-slate-100">
+                <div class="pt-5 border-t border-slate-100">
+                    <x-appointment-documents :appointment="$appointment" />
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3">
                     <a href="{{ route('patient.appointments.index') }}" class="btn-mentea-outline">Volver al listado</a>
 
                     @if($appointment->status->value === 'completed' && !$appointment->survey)
@@ -67,8 +71,6 @@
                             Valorar esta cita
                         </a>
                     @endif
-
-                    <x-appointment-documents :appointment="$appointment" />
 
                     @can('reschedule', $appointment)
                         <a href="{{ route('patient.appointments.edit', $appointment) }}" class="btn-mentea">

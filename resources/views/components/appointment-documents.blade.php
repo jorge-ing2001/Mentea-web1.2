@@ -9,11 +9,11 @@
                 <div class="flex flex-wrap gap-2">
                     <a href="{{ route('documents.view', ['appointment' => $appointment, 'type' => 'order']) }}"
                        target="_blank" rel="noopener"
-                       class="btn-mentea text-sm px-3 py-1.5">
+                       class="btn-mentea text-sm px-3 py-1.5 whitespace-nowrap flex-1 min-w-[8rem] justify-center">
                         Ver documento
                     </a>
                     <a href="{{ route('documents.download', ['appointment' => $appointment, 'type' => 'order']) }}"
-                       class="btn-mentea-outline text-sm px-3 py-1.5">
+                       class="btn-mentea-outline text-sm px-3 py-1.5 whitespace-nowrap flex-1 min-w-[8rem] justify-center">
                         Descargar
                     </a>
                 </div>
@@ -27,11 +27,11 @@
                 <div class="flex flex-wrap gap-2">
                     <a href="{{ route('documents.view', ['appointment' => $appointment, 'type' => 'authorization']) }}"
                        target="_blank" rel="noopener"
-                       class="btn-mentea text-sm px-3 py-1.5">
+                       class="btn-mentea text-sm px-3 py-1.5 whitespace-nowrap flex-1 min-w-[8rem] justify-center">
                         Ver documento
                     </a>
                     <a href="{{ route('documents.download', ['appointment' => $appointment, 'type' => 'authorization']) }}"
-                       class="btn-mentea-outline text-sm px-3 py-1.5">
+                       class="btn-mentea-outline text-sm px-3 py-1.5 whitespace-nowrap flex-1 min-w-[8rem] justify-center">
                         Descargar
                     </a>
                 </div>
