@@ -31,6 +31,9 @@
         aria-label="Opciones de accesibilidad"
         x-ref="panel"
         tabindex="-1"
+        @keydown.tab="trapFocus($event)"
+        @keydown.shift.tab="trapFocus($event)"
+        @click.outside="close()"
     >
         <div class="mentea-a11y-header">
             <span class="mentea-a11y-title">Accesibilidad</span>
@@ -115,6 +118,17 @@ function menteaA11y() {
             this.applyFont();
             this.applyContrast();
             this.applyReduceMotion();
+
+            // Sigue los cambios de esquema de color del sistema operativo en vivo:
+            // solo mientras el tema activo sea 'system' se reaplica la clase dark.
+            try {
+                var mql = window.matchMedia('(prefers-color-scheme: dark)');
+                var onChange = function () {
+                    if (this.theme === 'system') { this.applyTheme(); }
+                }.bind(this);
+                if (mql.addEventListener) { mql.addEventListener('change', onChange); }
+                else if (mql.addListener) { mql.addListener(onChange); } // Safari antiguo
+            } catch (e) { /* matchMedia no disponible: sin seguimiento en vivo */ }
         },
 
         read(key) {
@@ -142,6 +156,32 @@ function menteaA11y() {
             this.$nextTick(function () {
                 if (this.$refs.button) { this.$refs.button.focus(); }
             }.bind(this));
+        },
+
+        // Mantiene el foco del teclado dentro del diálogo mientras está abierto
+        // (coherente con aria-modal="true"). Sin dependencias externas.
+        trapFocus(event) {
+            if (!this.open || !this.$refs.panel) { return; }
+            var selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+            var nodes = Array.prototype.slice.call(this.$refs.panel.querySelectorAll(selector));
+            var focusable = nodes.filter(function (n) {
+                return !n.disabled && n.offsetParent !== null;
+            });
+            if (focusable.length === 0) { return; }
+            var first = focusable[0];
+            var last = focusable[focusable.length - 1];
+            var active = document.activeElement;
+            if (event.shiftKey) {
+                if (active === first || !this.$refs.panel.contains(active)) {
+                    event.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if (active === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
         },
 
         prefersDark() {
