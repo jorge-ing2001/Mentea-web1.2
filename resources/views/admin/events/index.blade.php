@@ -14,7 +14,7 @@
                 Aquí el administrador documenta <strong>eventos e incidencias</strong> de la plataforma
                 (mantenimiento, cambios, seguridad, etc.). No son tickets de pacientes.
             </p>
-            <div class="mentea-card overflow-hidden">
+            <div class="mentea-card overflow-x-auto">
                 <table class="mentea-table">
                     <thead>
                         <tr>
@@ -38,7 +38,12 @@
                                 <td>{{ $e->priorityLabel() }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="5" class="text-center py-8 text-slate-500">Sin diligenciamientos aún.</td></tr>
+                            <tr><td colspan="5">
+                                <div class="mentea-empty-state">
+                                    <x-icon name="clipboard" class="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                                    <p>Sin diligenciamientos aún.</p>
+                                </div>
+                            </td></tr>
                         @endforelse
                     </tbody>
                 </table>

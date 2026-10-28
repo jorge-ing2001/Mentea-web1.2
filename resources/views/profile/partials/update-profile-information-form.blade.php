@@ -19,7 +19,7 @@
         <div class="grid sm:grid-cols-2 gap-4">
             <div>
                 <x-input-label for="document_type" value="Tipo de documento" />
-                <select id="document_type" name="document_type" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-teal-500 focus:ring-teal-500" aria-label="Tipo de documento">
+                <select id="document_type" name="document_type" class="mentea-input mt-1" aria-label="Tipo de documento">
                     @foreach(['CC'=>'Cédula de ciudadanía','CE'=>'Cédula de extranjería','TI'=>'Tarjeta de identidad','PA'=>'Pasaporte','RC'=>'Registro civil','OTRO'=>'Otro'] as $v=>$l)
                         <option value="{{ $v }}" @selected(old('document_type', $user->document_type)===$v)>{{ $l }}</option>
                     @endforeach

@@ -9,8 +9,8 @@
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-4">
             @if(session('success'))<div class="alert-success">{{ session('success') }}</div>@endif
             <form method="GET" class="flex flex-wrap gap-2">
-                <input type="text" name="q" value="{{ $q }}" placeholder="Buscar…" class="mentea-input max-w-xs">
-                <select name="role" class="mentea-input w-auto" onchange="this.form.submit()">
+                <input type="text" name="q" value="{{ $q }}" placeholder="Buscar…" aria-label="Buscar usuarios" class="mentea-input max-w-xs">
+                <select name="role" class="mentea-input w-auto" aria-label="Filtrar por rol" onchange="this.form.submit()">
                     <option value="">Todos los roles</option>
                     @foreach($roles as $r)
                         <option value="{{ $r->value }}" @selected($roleFilter===$r->value)>{{ $r->label() }}</option>
@@ -19,20 +19,31 @@
                 <button class="btn-mentea">Filtrar</button>
             </form>
             <div class="mentea-card overflow-hidden">
-                <table class="mentea-table">
-                    <thead><tr><th>Nombre</th><th>Email</th><th>Documento</th><th>Rol</th><th>Activo</th></tr></thead>
-                    <tbody>
-                        @foreach($users as $u)
-                            <tr>
-                                <td class="font-medium">{{ $u->name }}</td>
-                                <td class="text-sm">{{ $u->email }}</td>
-                                <td class="text-sm">{{ $u->document_type }} {{ $u->document_number }}</td>
-                                <td><span class="text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-800">{{ $u->role?->label() ?? $u->role }}</span></td>
-                                <td>{{ $u->is_active ? 'Sí' : 'No' }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                <div class="overflow-x-auto">
+                    <table class="mentea-table">
+                        <thead><tr><th>Nombre</th><th>Email</th><th>Documento</th><th>Rol</th><th>Activo</th></tr></thead>
+                        <tbody>
+                            @forelse($users as $u)
+                                <tr>
+                                    <td class="font-medium">{{ $u->name }}</td>
+                                    <td class="text-sm">{{ $u->email }}</td>
+                                    <td class="text-sm whitespace-nowrap">{{ $u->document_type }} {{ $u->document_number }}</td>
+                                    <td><span class="mentea-chip">{{ $u->role?->label() ?? $u->role }}</span></td>
+                                    <td><span class="{{ $u->is_active ? 'badge-active' : 'badge-inactive' }}">{{ $u->is_active ? 'Sí' : 'No' }}</span></td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="mentea-empty-state">
+                                            <x-icon name="users" class="w-8 h-8 text-slate-300" />
+                                            <p>No se encontraron usuarios.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
             </div>
             {{ $users->links() }}
         </div>

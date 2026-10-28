@@ -22,11 +22,11 @@
                                 <h3 class="font-semibold text-slate-900">{{ $role->name }}</h3>
                                 <p class="text-xs text-slate-500 mt-1">{{ $role->users_count }} usuario(s)</p>
                             </div>
-                            <a href="{{ route('super.roles.edit', $role) }}" class="text-sm text-teal-700 hover:underline">Editar permisos</a>
+                            <a href="{{ route('super.roles.edit', $role) }}" class="text-sm text-mentea-700 hover:underline">Editar permisos</a>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-1">
                             @forelse($role->permissions->take(8) as $perm)
-                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-800">{{ $perm->name }}</span>
+                                <span class="mentea-chip">{{ $perm->name }}</span>
                             @empty
                                 <span class="text-xs text-slate-400">Sin permisos</span>
                             @endforelse

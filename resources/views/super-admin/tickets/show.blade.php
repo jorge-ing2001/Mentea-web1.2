@@ -8,11 +8,23 @@
                 <div class="alert-success">{{ session('success') }}</div>
             @endif
             <div class="mentea-card p-6 space-y-3 text-sm">
-                <div><span class="text-slate-500">Tipo:</span> <strong>{{ $ticket->typeLabel() }}</strong>
-                    @if($ticket->category)
-                        · {{ \App\Models\SupportTicket::categories()[$ticket->category] ?? $ticket->category }}
-                    @endif
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="badge {{ $ticket->isPlatformEvent() ? 'bg-amber-100 text-amber-800' : 'bg-mentea-50 text-mentea-700' }}">{{ $ticket->typeLabel() }}</span>
+                    @php
+                        $statusBadge = match($ticket->status) {
+                            'open' => 'bg-amber-100 text-amber-800',
+                            'in_progress' => 'bg-blue-100 text-blue-800',
+                            'resolved' => 'bg-emerald-100 text-emerald-800',
+                            'closed' => 'bg-slate-200 text-slate-700',
+                            default => 'bg-slate-100 text-slate-700',
+                        };
+                    @endphp
+                    <span class="badge {{ $statusBadge }}">{{ $ticket->statusLabel() }}</span>
+                    <span class="badge bg-slate-100 text-slate-700">Prioridad: {{ $ticket->priorityLabel() }}</span>
                 </div>
+                @if($ticket->category)
+                    <div><span class="text-slate-500">Categoría:</span> {{ \App\Models\SupportTicket::categories()[$ticket->category] ?? $ticket->category }}</div>
+                @endif
                 <div><span class="text-slate-500">Usuario:</span> <strong>{{ $ticket->user?->name }}</strong> ({{ $ticket->user?->email }})</div>
                 <div><span class="text-slate-500">Asunto:</span> {{ $ticket->subject }}</div>
                 <div><span class="text-slate-500">Mensaje:</span>
