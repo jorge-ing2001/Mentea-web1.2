@@ -33,6 +33,11 @@
         @apply font-display text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight;
     }
 
+    /* Bloque de sección con separación vertical consistente */
+    .mentea-section {
+        @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6;
+    }
+
     /* —— Cards —— */
     .mentea-card {
         @apply bg-white rounded-2xl border border-slate-200/80 shadow-card;
@@ -63,15 +68,18 @@
     .btn-mentea-ghost {
         @apply inline-flex items-center justify-center gap-2 px-4 py-2
                rounded-xl text-sm font-medium text-slate-600
-               hover:bg-slate-100 hover:text-slate-900
-               transition duration-150;
+               hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200
+               focus:outline-none focus:ring-2 focus:ring-mentea-500 focus:ring-offset-2
+               transition duration-150
+               disabled:opacity-50 disabled:cursor-not-allowed;
     }
 
     /* —— Forms —— */
     .mentea-input {
         @apply w-full rounded-xl border-slate-300 shadow-sm
                focus:border-mentea-500 focus:ring-mentea-500
-               text-sm placeholder:text-slate-400;
+               text-sm placeholder:text-slate-400
+               disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed;
     }
 
     .mentea-label {
@@ -89,6 +97,36 @@
     .badge-cancelled { @apply badge bg-red-100 text-red-800; }
     .badge-active    { @apply badge bg-emerald-100 text-emerald-800; }
     .badge-inactive  { @apply badge bg-slate-200 text-slate-700; }
+
+    /* —— Chips / filtros tipo pill —— */
+    .mentea-chip {
+        @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full
+               text-xs font-medium bg-mentea-50 text-mentea-700 border border-mentea-100;
+    }
+
+    .mentea-filter-chip {
+        @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full
+               text-sm font-medium text-slate-600 bg-white border border-slate-200
+               hover:bg-slate-50 hover:text-slate-900
+               focus:outline-none focus:ring-2 focus:ring-mentea-500 focus:ring-offset-1
+               transition duration-150;
+    }
+
+    .mentea-filter-chip-active {
+        @apply mentea-filter-chip bg-mentea-600 text-white border-mentea-600 hover:bg-mentea-700 hover:text-white;
+    }
+
+    /* —— Avatar con iniciales / acento de marca —— */
+    .mentea-avatar {
+        @apply inline-flex items-center justify-center shrink-0 rounded-full
+               bg-mentea-100 text-mentea-700 font-semibold;
+    }
+
+    /* —— Estado vacío —— */
+    .mentea-empty-state {
+        @apply flex flex-col items-center justify-center text-center gap-2
+               py-12 px-6 text-slate-500;
+    }
 
     /* —— Tables —— */
     .mentea-table {
@@ -156,8 +194,8 @@
     .mentea-logo {
         @apply font-display text-xl font-bold tracking-tight
                bg-clip-text text-transparent bg-mentea-gradient;
-        /* fallback if bg-clip issues */
-        color: #6d28d9;
+        /* respaldo si bg-clip no está soportado (color de marca) */
+        color: #0F766E;
     }
 }
 

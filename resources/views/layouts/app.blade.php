@@ -22,7 +22,7 @@
                 </header>
             @endisset
 
-            <main id="main-content" class="pb-12">
+            <main id="main-content" class="pb-12 pt-2 sm:pt-4" tabindex="-1">
                 {{ $slot }}
             </main>
 
