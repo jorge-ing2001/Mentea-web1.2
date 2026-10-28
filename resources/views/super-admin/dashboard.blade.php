@@ -27,12 +27,12 @@
                 <div class="mentea-card p-5">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="font-semibold text-slate-800">Tickets recientes</h3>
-                        <a href="{{ route('super.tickets.index') }}" class="text-sm text-teal-700 hover:underline">Ver todos</a>
+                        <a href="{{ route('super.tickets.index') }}" class="text-sm text-mentea-700 hover:underline">Ver todos</a>
                     </div>
                     <ul class="divide-y text-sm">
                         @forelse($recentTickets as $t)
                             <li class="py-2 flex justify-between gap-2">
-                                <a href="{{ route('super.tickets.show', $t) }}" class="text-teal-700 hover:underline truncate">{{ $t->subject }}</a>
+                                <a href="{{ route('super.tickets.show', $t) }}" class="text-mentea-700 hover:underline truncate">{{ $t->subject }}</a>
                                 <span class="text-slate-400 shrink-0">{{ $t->statusLabel() }}</span>
                             </li>
                         @empty
@@ -43,7 +43,7 @@
                 <div class="mentea-card p-5">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="font-semibold text-slate-800">Auditoría reciente</h3>
-                        <a href="{{ route('super.audit.index') }}" class="text-sm text-teal-700 hover:underline">Ver todo</a>
+                        <a href="{{ route('super.audit.index') }}" class="text-sm text-mentea-700 hover:underline">Ver todo</a>
                     </div>
                     <ul class="divide-y text-sm">
                         @forelse($recentAudit as $log)

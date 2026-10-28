@@ -132,24 +132,24 @@
             </button>
         </x-slot>
                     <x-slot name="content">
-                        <div class="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-                            <span class="text-sm font-semibold text-gray-800">Notificaciones</span>
-                            <a href="{{ route('notifications.index') }}" class="text-xs text-teal-600 hover:underline">Ver todas</a>
+                        <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                            <span class="text-sm font-semibold text-slate-800">Notificaciones</span>
+                            <a href="{{ route('notifications.index') }}" class="text-xs text-mentea-700 hover:underline">Ver todas</a>
                         </div>
                         @forelse(Auth::user()->notifications()->take(6)->get() as $n)
                             @php $d = $n->data; @endphp
-                            <a href="{{ route('notifications.read', $n->id) }}" class="block px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 {{ $n->read_at ? '' : 'bg-teal-50/60' }}">
-                                <div class="font-medium text-gray-900">{{ $d['title'] ?? 'Aviso' }}</div>
-                                <div class="text-xs text-gray-500 mt-0.5">{{ \Illuminate\Support\Str::limit($d['body'] ?? '', 80) }}</div>
-                                <div class="text-[10px] text-gray-400 mt-1">{{ $n->created_at->diffForHumans() }}</div>
+                            <a href="{{ route('notifications.read', $n->id) }}" class="block px-4 py-3 text-sm hover:bg-slate-50 border-b border-slate-100 {{ $n->read_at ? '' : 'bg-mentea-50/60' }}">
+                                <div class="font-medium text-slate-900">{{ $d['title'] ?? 'Aviso' }}</div>
+                                <div class="text-xs text-slate-500 mt-0.5">{{ \Illuminate\Support\Str::limit($d['body'] ?? '', 80) }}</div>
+                                <div class="text-[10px] text-slate-400 mt-1">{{ $n->created_at->diffForHumans() }}</div>
                             </a>
                         @empty
-                            <div class="px-4 py-6 text-center text-sm text-gray-500">Sin notificaciones</div>
+                            <div class="px-4 py-6 text-center text-sm text-slate-500">Sin notificaciones</div>
                         @endforelse
                         @if(Auth::user()->unreadNotifications()->exists())
-                            <form method="POST" action="{{ route('notifications.read-all') }}" class="border-t">
+                            <form method="POST" action="{{ route('notifications.read-all') }}" class="border-t border-slate-100">
                                 @csrf
-                                <button type="submit" class="w-full text-center text-xs text-teal-600 py-2.5 hover:bg-gray-50">Marcar todas como leídas</button>
+                                <button type="submit" class="w-full text-center text-xs text-mentea-700 py-2.5 hover:bg-slate-50">Marcar todas como leídas</button>
                             </form>
                         @endif
                     </x-slot>
@@ -157,7 +157,7 @@
 
                 <x-dropdown align="right" width="48">
                     <x-slot name="trigger">
-                        <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none transition">
+                        <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-slate-500 bg-white hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-mentea-500 focus:ring-offset-1 transition">
                             <div>{{ Auth::user()->name }}</div>
                             <div class="ms-1">
                                 <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">

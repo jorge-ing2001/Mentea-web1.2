@@ -15,12 +15,12 @@
                 <strong>Diligenciamiento:</strong> eventos documentados por el equipo sobre la plataforma.
             </p>
             <form method="GET" class="flex gap-2 flex-wrap">
-                <select name="type" class="mentea-input w-auto" onchange="this.form.submit()">
+                <select name="type" class="mentea-input w-auto" aria-label="Filtrar por tipo" onchange="this.form.submit()">
                     <option value="">Todos los tipos</option>
                     <option value="support" @selected(($type ?? '')==='support')>Soporte usuario</option>
                     <option value="platform_event" @selected(($type ?? '')==='platform_event')>Diligenciamiento / evento</option>
                 </select>
-                <select name="status" class="mentea-input w-auto" onchange="this.form.submit()">
+                <select name="status" class="mentea-input w-auto" aria-label="Filtrar por estado" onchange="this.form.submit()">
                     <option value="">Todos los estados</option>
                     @foreach(['open'=>'Abierto','in_progress'=>'En progreso','resolved'=>'Resuelto','closed'=>'Cerrado'] as $v=>$l)
                         <option value="{{ $v }}" @selected(($status ?? '')===$v)>{{ $l }}</option>
@@ -28,6 +28,7 @@
                 </select>
             </form>
             <div class="mentea-card overflow-hidden">
+                <div class="overflow-x-auto">
                 <table class="mentea-table">
                     <thead>
                         <tr>
@@ -45,21 +46,40 @@
                             <tr>
                                 <td>{{ $t->id }}</td>
                                 <td>
-                                    <span class="text-xs px-2 py-0.5 rounded-full {{ $t->isPlatformEvent() ? 'bg-amber-50 text-amber-800' : 'bg-teal-50 text-teal-800' }}">
+                                    <span class="badge {{ $t->isPlatformEvent() ? 'bg-amber-100 text-amber-800' : 'bg-mentea-50 text-mentea-700' }}">
                                         {{ $t->typeLabel() }}
                                     </span>
                                 </td>
-                                <td><a href="{{ route('super.tickets.show', $t) }}" class="text-teal-700 hover:underline">{{ $t->subject }}</a></td>
+                                <td><a href="{{ route('super.tickets.show', $t) }}" class="font-medium text-mentea-700 hover:underline">{{ $t->subject }}</a></td>
                                 <td>{{ $t->user?->name }}</td>
                                 <td>{{ $t->priorityLabel() }}</td>
-                                <td>{{ $t->statusLabel() }}</td>
-                                <td class="text-slate-500">{{ $t->created_at->format('d/m/Y H:i') }}</td>
+                                <td>
+                                    @php
+                                        $statusBadge = match($t->status) {
+                                            'open' => 'bg-amber-100 text-amber-800',
+                                            'in_progress' => 'bg-blue-100 text-blue-800',
+                                            'resolved' => 'bg-emerald-100 text-emerald-800',
+                                            'closed' => 'bg-slate-200 text-slate-700',
+                                            default => 'bg-slate-100 text-slate-700',
+                                        };
+                                    @endphp
+                                    <span class="badge {{ $statusBadge }}">{{ $t->statusLabel() }}</span>
+                                </td>
+                                <td class="text-slate-500 whitespace-nowrap">{{ $t->created_at->format('d/m/Y H:i') }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="text-center text-slate-500 py-8">No hay registros.</td></tr>
+                            <tr>
+                                <td colspan="7">
+                                    <div class="mentea-empty-state">
+                                        <x-icon name="chat" class="w-8 h-8 text-slate-300" />
+                                        <p>No hay registros.</p>
+                                    </div>
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
             {{ $tickets->links() }}
         </div>
