@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="system">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ config('app.name', 'Mentea') }} — Iniciar sesión</title>
+        @include('partials.theme-bootstrap')
         @include('partials.brand-head')
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         <link rel="stylesheet" href="{{ asset('css/mentea.css') }}">
@@ -26,6 +27,7 @@
                 Gracias por priorizar tu salud mental.
             </p>
         </div>
+        @include('partials.accessibility-panel')
         @include('partials.chat-widget')
     </body>
 </html>

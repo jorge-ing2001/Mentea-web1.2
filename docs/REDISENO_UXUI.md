@@ -162,3 +162,61 @@ El rediseño se entrega en features incrementales. Esta feature (FEAT-001) estab
 | **FEAT-005** | Superadministración (`super-admin/*`, ya cercano al estándar), notificaciones, errores y `welcome`: pulido final y verificación de consistencia global. |
 
 > Cada feature posterior preserva el marcado funcional (rutas, `name`, `@csrf`, `@method`, validaciones, permisos e integraciones) y verifica que la suite de pruebas se mantenga en el baseline esperado.
+
+## 8. Marca, iconos, footer fijo y accesibilidad (entrega de marca + a11y)
+
+Esta sección documenta la entrega final de marca y accesibilidad (features FEAT-001 a FEAT-003 de la tanda `task-brand-a11y-citas-footer`): cableado de logos/favicon, estrategia de iconos, corrección del detalle de cita, footer fijo y el panel de accesibilidad con motor de temas.
+
+### 8.1 Estrategia de iconos y logos
+
+- **Iconos como SVG inline:** el set vive en `resources/views/components/icon.blade.php` (`<x-icon name=.. />`) y `nav-icon.blade.php` (`<x-nav-icon .. />`). Todos pintan con `currentColor`, por lo que heredan el color del contexto (estados activo/hover, tema oscuro, alto contraste) sin generar variantes de archivo. Esto evita cortar imágenes y mantiene un peso mínimo.
+- **`section-icons-strip.png` NO se trocea:** la tira de iconos por sección del brand kit se conserva como referencia de diseño, pero la UI usa los SVG inline equivalentes (Inicio, Mi cuenta, Evaluaciones, Chat/Soporte, etc.). Trocear el PNG habría añadido peticiones y problemas de nitidez/contraste; el SVG `currentColor` cubre el mismo mapa de secciones.
+- **Logos por superficie:** `resources/views/components/application-logo.blade.php` expone variantes (`symbol`, `horizontal`, `full`, claro/oscuro). En la navegación el cambio claro/oscuro se hace por CSS (`.mentea-logo-light` / `.mentea-logo-dark` bajo `html.dark`), de modo que el logotipo legible se muestra según el tema activo.
+- **Favicon y manifest:** `resources/views/partials/brand-head.blade.php` enlaza favicon (`public/favicon/icon-16/32/48/180/192/512.png`), `apple-touch-icon` y el manifest, incluidos en el `<head>` de ambos shells (`app` y `guest`).
+
+### 8.2 Footer fijo (sticky footer)
+
+El footer se quedaba "flotando" arriba en páginas cortas dejando un hueco inferior. Solución puramente de maquetación:
+
+- `.mentea-page` pasa a ser **columna flex** con alto mínimo de viewport: `min-h-screen` + `display:flex; flex-direction:column`. Se aplica de forma consistente en **ambas** hojas: `resources/css/app.css` (`@layer components .mentea-page`, con `flex flex-col`) y `public/css/mentea.css` (`.mentea-page`).
+- El `<main id="main-content">` recibe `flex-1` para ocupar el espacio restante, empujando el `<footer>` al fondo en páginas cortas y dejándolo fluir con normalidad en páginas largas.
+- No se altera el contenido del footer (wordmark MENTEA + tagline + copyright) ni el bloque `@isset($header)`.
+- `layouts/guest.blade.php` ya usaba `min-h-screen flex flex-col` y no tiene footer persistente, por lo que no necesitó el ajuste.
+
+### 8.3 Panel de accesibilidad + motor de temas (cliente)
+
+Nuevo partial `resources/views/partials/accessibility-panel.blade.php`: un **botón flotante** (abajo-izquierda, clase `.mentea-a11y-widget` / `.mentea-a11y-button`, círculo con degradado de marca y glifo de accesibilidad universal en SVG inline) que abre un **diálogo** Alpine. Se coloca a la izquierda para **no solaparse** con la burbuja de chat (abajo-derecha, `z-index:60`); el panel comparte `z-index:60`.
+
+**Controles (todos persistidos en `localStorage`, sin tocar backend/BD):**
+
+| Control | Efecto en `<html>` | Clave en `localStorage` |
+| --- | --- | --- |
+| Tema: Claro / Oscuro / Sistema | alterna `.dark` y fija `data-theme` | `mentea_theme` (`light`/`dark`/`system`) |
+| Tamaño de fuente: A- / A / A+ | fija `data-font` (`sm`/`lg`) o lo quita | `mentea_font` (`sm`/`lg`; `normal` borra la clave) |
+| Alto contraste | alterna `.mentea-contrast` | `mentea_contrast` (`1` o ausente) |
+| Reducir movimiento | alterna `.mentea-reduce-motion` | `mentea_reduce_motion` (`1` o ausente) |
+| Restablecer | limpia las cuatro claves y vuelve a por defecto | — |
+
+**Accesibilidad del panel:** `role="dialog"`, `aria-modal="true"`, `aria-label`, controles etiquetados (`fieldset`/`legend`, `aria-pressed`, `role="switch"`/`aria-checked`). `Escape` cierra; al abrir, el foco entra al panel y al cerrar vuelve al botón. Aprovecha el `:focus-visible` existente.
+
+**Motor de temas CSS (en `public/css/mentea.css`):**
+
+- `tailwind.config.js` añade `darkMode: 'class'` para alinear las variantes `dark:` de Tailwind con el `html.dark` ya usado (incluido el intercambio de logo de la navegación).
+- Se **ampliaron** las reglas `html.dark` para cubrir de forma legible los componentes compartidos: `.mentea-card`, `.btn-mentea-outline`/`.btn-mentea-ghost`, `.mentea-chip`/`.mentea-filter-chip`, badges de estado, `.mentea-table` (thead/td/hover), `.mentea-stat*`, `.alert-*`, `.mentea-empty-state`, `.mentea-avatar`, inputs/labels/placeholders, enlaces de navegación, menús desplegables y el footer. El acento de marca (teal/verde) se mantiene legible sobre fondo oscuro.
+- **Hooks de escala/contraste/movimiento:** `html[data-font='sm']{font-size:93.75%}` y `html[data-font='lg']{font-size:112.5%}` (escala la raíz para que todo el `rem` reaccione); `html.mentea-contrast` oscurece texto, refuerza bordes y subraya enlaces (con variante también para `html.dark.mentea-contrast`); `html.mentea-reduce-motion *` neutraliza animaciones/transiciones.
+
+**Bootstrap sin flash:** `resources/views/partials/theme-bootstrap.blade.php` es un `<script>` en el `<head>` (antes del CSS) que lee las cuatro claves de `localStorage` y aplica clases/atributos a `<html>` **antes del primer pintado**. Si no hay override en `localStorage`, respeta el `data-theme` renderizado por el servidor (derivado de `preferred_theme`), que permanece como valor por defecto. El panel se incluye en `layouts/app.blade.php` y en `layouts/guest.blade.php` (para que el tema funcione antes de iniciar sesión).
+
+**Persistencia 100% cliente:** no se escribe `preferred_theme` ni ningún campo de BD desde el panel. El atributo `data-theme` server-side se mantiene intacto como valor inicial; los overrides viven solo en `localStorage`/Alpine. Esto se verifica con `git diff --name-only main -- routes app config database bootstrap` (vacío).
+
+### 8.4 Detalle de cita del paciente (corrección de UI)
+
+En `patient/appointments/show.blade.php` y el componente `appointment-documents.blade.php` se corrigieron los botones "Reprogramar"/"Cancelar cita" desproporcionadamente altos y el texto recortado de las tarjetas de documentos ("Ver docume…", "Desca…"), sin alterar rutas, métodos HTTP, `@csrf`/`@method` ni atributos `name`.
+
+### 8.5 Pendientes de pulido en oscuro (seguimiento)
+
+La cobertura de tema oscuro se hace vía CSS en cascada sobre las clases del sistema `mentea`, por lo que alcanza a las ~65 vistas unificadas. Posibles ajustes finos de seguimiento (no bloqueantes):
+
+- Vistas con **colores de utilidad embebidos** fuera del sistema (p. ej. `bg-white`/`text-gray-*` sueltos en marcado puntual) pueden necesitar repasos localizados; el motor cubre los casos comunes mediante selectores `html.dark .bg-white`, `.text-gray-*`, etc., pero marcado muy específico podría requerir ajuste.
+- Ilustraciones/gráficos rasterizados (si los hubiera en reportes) y PNGs con fondo claro pueden pedir una variante oscura dedicada.
+- La página `welcome`/landing y correos/plantillas de notificación no forman parte del shell autenticado y quedan fuera del alcance del motor de temas del panel.

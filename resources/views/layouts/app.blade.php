@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ config('app.name', 'Mentea') }}@isset($title) — {{ $title }}@endisset</title>
+        @include('partials.theme-bootstrap')
         @include('partials.brand-head')
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         <link rel="stylesheet" href="{{ asset('css/mentea.css') }}">
@@ -22,7 +23,7 @@
                 </header>
             @endisset
 
-            <main id="main-content" class="pb-12 pt-2 sm:pt-4" tabindex="-1">
+            <main id="main-content" class="flex-1 pb-12 pt-2 sm:pt-4" tabindex="-1">
                 {{ $slot }}
             </main>
 
@@ -32,14 +33,7 @@
                 Conecta con tu bienestar mental · © {{ date('Y') }}
             </footer>
         </div>
+    @include('partials.accessibility-panel')
     @include('partials.chat-widget')
-    <script>
-(function(){
-  var t = document.documentElement.getAttribute('data-theme');
-  if (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.classList.add('dark');
-  }
-})();
-</script>
 </body>
 </html>
