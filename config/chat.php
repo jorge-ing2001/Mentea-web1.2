@@ -19,6 +19,20 @@ return [
     'model' => env('OPENROUTER_MODEL', 'openai/gpt-4o-mini'),
     'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
 
+    /*
+    | Prompt del sistema (filosofía de SOLO LECTURA). Si se deja vacío,
+    | ChatAgentService usa el prompt por defecto codificado (ver §8 de
+    | PLAN-SOLO-LECTURA.md). Se puede sobreescribir por entorno sin tocar código.
+    */
+    'system_prompt' => env('CHAT_SYSTEM_PROMPT', ''),
+
+    /*
+    | Ruta del CSV de la base de conocimiento (RAG). Editable sin cambiar código;
+    | KnowledgeBase lo lee en tiempo de ejecución y recupera 3-6 fragmentos por
+    | consulta (nunca el archivo completo).
+    */
+    'knowledge_base_path' => env('CHAT_KNOWLEDGE_BASE_PATH', base_path('docs/agente/base-conocimiento.csv')),
+
     // Cuántos mensajes recientes (user/assistant) se envían al modelo por turno.
     'history_window' => (int) env('CHAT_HISTORY_WINDOW', 12),
 
