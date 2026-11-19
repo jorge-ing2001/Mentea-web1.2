@@ -33,6 +33,29 @@ return [
     */
     'knowledge_base_path' => env('CHAT_KNOWLEDGE_BASE_PATH', base_path('docs/agente/base-conocimiento.csv')),
 
+    /*
+    | Perfil del agente respecto a operaciones transaccionales.
+    |
+    | PLAN-SOLO-LECTURA §3/§7 pide un agente ESTRICTAMENTE de solo lectura (el
+    | usuario ejecuta cancelar/reprogramar/agendar/lista de espera en los
+    | módulos; el agente solo orienta y enlaza). Las ramas transaccionales
+    | heredadas (handleCancel/handleReschedule/handleWaitlist y la resolución de
+    | ofertas pendientes) se conservan por compatibilidad y para no desactivar
+    | la suite existente, pero quedan gateadas por esta bandera:
+    |
+    |   - true  (por defecto): comportamiento histórico; los comandos directos
+    |            ("Quiero cancelar mi cita") ejecutan vía los servicios de
+    |            negocio. La orientación de solo lectura ("¿cómo cancelo?") sigue
+    |            interceptando las frases de procedimiento.
+    |   - false (perfil solo lectura): las ramas transaccionales se desactivan;
+    |            TODA intención operativa se enruta a la orientación de solo
+    |            lectura (pasos + enlace interno verificado), sin tocar la BD.
+    |
+    | Se puede activar el perfil solo lectura por entorno sin tocar código:
+    | CHAT_AGENT_TRANSACTIONAL=false.
+    */
+    'agent_transactional_enabled' => (bool) env('CHAT_AGENT_TRANSACTIONAL', true),
+
     // Cuántos mensajes recientes (user/assistant) se envían al modelo por turno.
     'history_window' => (int) env('CHAT_HISTORY_WINDOW', 12),
 

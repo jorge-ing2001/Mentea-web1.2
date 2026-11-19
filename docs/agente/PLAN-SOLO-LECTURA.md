@@ -111,11 +111,35 @@ Si Ollama no responde: respuestas **deterministas de seguridad** claramente dist
 - ✅ **Matriz de pruebas de seguridad** implementada en `tests/Feature/Chat/`
   (aislamiento paciente/profesional, gateo por rol, intentos de evasión, no
   inventar, crisis con proveedor caído).
-- ⚠️ **Diferencia honesta (aditivo):** por el invariante de no desactivar los
-  tests existentes, la capa transaccional previa (`ChatTools` y el flujo de
-  reserva/cancelación/reprogramación de `ChatAgentService`) **no se eliminó**; se
-  mantuvo intacta junto a la capa de solo lectura. La orientación de solo lectura
-  se activa ante frases de tipo "cómo / dónde"; los comandos transaccionales
-  directos siguen enrutando al flujo existente. Esto se aparta del objetivo de
-  "retirar del agente las herramientas transaccionales" (§3/§7) y queda marcado
-  para revisión del orquestador.
+- ✅ **Enlace y aclaración de orientación garantizados:** cuando el proveedor
+  está arriba, la respuesta de orientación pasa por `phrase()`, cuya guarda
+  anti-alucinación solo ancla horas/fechas/nombres de profesional, no la URL ni
+  la aclaración. Para que la redirección de SOLO LECTURA no pueda perderse,
+  `ChatAgentService::ensureOrientationAnchors()` re-ancla de forma determinista
+  el enlace interno verificado (comparando por ruta, sin duplicar) y la
+  aclaración "la acción la realizas tú" después de la redacción del modelo.
+  Cubierto por `tests/Feature/Chat/ChatOllamaAgentTest.php`.
+- ✅ **Ruta Ollama ejercitada end-to-end:** `tests/Feature/Chat/ChatOllamaAgentTest.php`
+  fuerza `config('ai.provider')=ollama`, falsea el ping (`GET /api/tags`) y la
+  respuesta de chat con forma Ollama (`{message:{content}}`) y conduce un turno
+  por `ChatAgentService`, verificando que el agente usa `message.content`, que la
+  petición va a `/api/chat` con `stream:false` y sin `Authorization`, y que la
+  orientación con proveedor arriba conserva el enlace. `phpunit.xml` mantiene
+  `AI_PROVIDER=openrouter` solo para que la suite heredada OpenAI-shaped siga
+  verde sin editarla.
+- ✅ **Perfil de SOLO LECTURA conmutable (§3/§7):** las ramas transaccionales
+  (`handleCancel`/`handleReschedule`/`handleWaitlist` y la resolución de ofertas
+  pendientes) quedan gateadas por `config('chat.agent_transactional_enabled')`
+  (env `CHAT_AGENT_TRANSACTIONAL`). Con la bandera en `false` (perfil solo
+  lectura) TODA intención operativa, incluso un comando directo ("Quiero cancelar
+  mi cita"), se enruta a la orientación de solo lectura (pasos + enlace), sin
+  tocar la BD, cumpliendo el objetivo de "retirar del agente las herramientas
+  transaccionales".
+- ⚠️ **Diferencia honesta (aditivo, valor por defecto):** la bandera anterior es
+  `true` por defecto para no desactivar la suite existente (invariante del
+  orquestador). Con el valor por defecto la capa transaccional previa (`ChatTools`
+  y el flujo de reserva/cancelación/reprogramación) sigue intacta; la orientación
+  de solo lectura se activa ante frases de tipo "cómo / dónde" y los comandos
+  directos enrutan al flujo existente. El perfil estricto de solo lectura de §3/§7
+  se obtiene fijando `CHAT_AGENT_TRANSACTIONAL=false` (verificado por test) sin
+  eliminar código ni romper tests.

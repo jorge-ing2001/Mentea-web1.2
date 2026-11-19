@@ -89,9 +89,18 @@ class ChatAgentService
             ]);
         }
 
+        // Perfil del agente: con el perfil de SOLO LECTURA activo
+        // (config('chat.agent_transactional_enabled') === false) se desactivan
+        // TODAS las ramas transaccionales (resolución de ofertas pendientes y
+        // cancelar/reprogramar/agendar/lista de espera). Cualquier intención
+        // operativa se enruta entonces a la orientación de solo lectura (pasos +
+        // enlace interno verificado), sin tocar la BD. Por defecto la bandera es
+        // true y se conserva el comportamiento transaccional histórico.
+        $transactional = (bool) config('chat.agent_transactional_enabled', true);
+
         // 4) Seguimiento de una acción pendiente (confirmar un cupo ofrecido o
         //    una reprogramación). Requiere paciente autenticado con consentimiento.
-        if ($pending !== null && $this->isAuthenticatedPatientWithConsent($user)) {
+        if ($transactional && $pending !== null && $this->isAuthenticatedPatientWithConsent($user)) {
             $resolved = $this->resolvePendingAction($conversation, $pending, $userMessage, $user);
             if ($resolved !== null) {
                 return $resolved;
@@ -108,23 +117,29 @@ class ChatAgentService
             return $this->handleOrientation($conversation, $userMessage, $user);
         }
 
+        // Perfil SOLO LECTURA: toda intención operativa (cancelar/reprogramar/
+        // agendar/lista de espera) se responde con orientación, nunca ejecutando.
+        if (! $transactional && $this->intendsAnyOperation($userMessage)) {
+            return $this->handleOrientation($conversation, $userMessage, $user);
+        }
+
         // 5) Cancelar una cita existente a través del agente.
-        if ($this->intendsToCancel($userMessage)) {
+        if ($transactional && $this->intendsToCancel($userMessage)) {
             return $this->handleCancel($conversation, $userMessage, $user);
         }
 
         // 6) Reprogramar una cita existente a través del agente.
-        if ($this->intendsToReschedule($userMessage)) {
+        if ($transactional && $this->intendsToReschedule($userMessage)) {
             return $this->handleReschedule($conversation, $userMessage, $user);
         }
 
         // 7) Alta explícita en lista de espera.
-        if ($this->intendsWaitlist($userMessage)) {
+        if ($transactional && $this->intendsWaitlist($userMessage)) {
             return $this->handleWaitlist($conversation, $userMessage, $user);
         }
 
         // 8) REGLA DURA: consentimiento antes de recolectar datos / agendar.
-        if ($this->intendsToBook($userMessage)) {
+        if ($transactional && $this->intendsToBook($userMessage)) {
             $gate = $this->bookingGate($conversation, $user);
             if ($gate !== null) {
                 return $gate;
@@ -460,17 +475,29 @@ class ChatAgentService
             $parts[] = 'Puedo explicarte cómo hacerlo desde la plataforma.';
         }
 
-        if (is_string($help['url']) && $help['url'] !== '') {
-            $parts[] = 'Aquí tienes el acceso directo: '.$help['url'];
+        $verifiedUrl = is_string($help['url']) && $help['url'] !== '' ? $help['url'] : null;
+
+        if ($verifiedUrl !== null) {
+            $parts[] = 'Aquí tienes el acceso directo: '.$verifiedUrl;
         } elseif ($role === null) {
             $parts[] = 'Para acceder al módulo necesitas iniciar sesión con tu cuenta.';
         }
 
         // Aclaración de solo lectura: el usuario ejecuta la acción.
-        $parts[] = 'Recuerda que la acción debes realizarla tú desde ese módulo; yo solo te oriento.';
+        $disclaimer = 'Recuerda que la acción debes realizarla tú desde ese módulo; yo solo te oriento.';
+        $parts[] = $disclaimer;
 
         $deterministic = implode(' ', $parts);
         $reply = $this->phrase($conversation, $message, $deterministic, $user);
+
+        // Garantía de redirección de SOLO LECTURA: el enlace interno verificado
+        // y la aclaración "la acción la realizas tú" son el núcleo de la
+        // orientación. phrase() solo ancla horas/fechas/nombres, no la URL ni la
+        // aclaración, así que el modelo podría omitirlas al reformular. Las
+        // re-anclamos de forma determinista para que SIEMPRE sobrevivan a la
+        // redacción del modelo. Nunca se inventa una URL: solo se re-adjunta el
+        // enlace ya verificado por ChatLinks (Route::has) para este rol.
+        $reply = $this->ensureOrientationAnchors($reply, $verifiedUrl, $disclaimer);
 
         return $this->finish($conversation, $reply, [
             'meta' => [
@@ -479,6 +506,46 @@ class ChatAgentService
                 'route' => $help['route'],
             ],
         ]);
+    }
+
+    /**
+     * Re-ancla de forma determinista los dos elementos irrenunciables de una
+     * respuesta de orientación de SOLO LECTURA: (1) el enlace interno verificado
+     * y (2) la aclaración de que el usuario ejecuta la acción. Si el modelo los
+     * conservó al reformular, no se duplica nada; si los omitió, se re-adjuntan.
+     * No inventa URLs: solo re-adjunta la ruta ya verificada (o ninguna si no
+     * había enlace aplicable al rol).
+     */
+    private function ensureOrientationAnchors(string $reply, ?string $verifiedUrl, string $disclaimer): string
+    {
+        $reply = rtrim($reply);
+
+        // Se compara por la RUTA (path) del enlace, no por la URL absoluta: el
+        // modelo puede reformular usando la forma relativa ("/paciente/citas")
+        // mientras ChatLinks entrega la forma absoluta. Si la ruta ya aparece
+        // (en cualquiera de las dos formas) no se re-adjunta, para no duplicar.
+        if ($verifiedUrl !== null) {
+            $path = parse_url($verifiedUrl, PHP_URL_PATH);
+            $alreadyLinked = str_contains($reply, $verifiedUrl)
+                || (is_string($path) && $path !== '' && str_contains($reply, $path));
+
+            if (! $alreadyLinked) {
+                $reply = rtrim($reply).' Aquí tienes el acceso directo: '.$verifiedUrl;
+            }
+        }
+
+        // La aclaración se da por presente si el modelo mantuvo la idea de que
+        // la acción la realiza el usuario (token "tú"/"ti"); si no, se re-adjunta
+        // el texto determinista completo.
+        $normalizedReply = $this->normalize($reply);
+        if (! str_contains($normalizedReply, 'realizarla tu')
+            && ! str_contains($normalizedReply, 'debes realizarla')
+            && ! str_contains($normalizedReply, ' tu desde')
+            && ! str_contains($normalizedReply, 'la realizas tu')) {
+            $reply = rtrim($reply).' '.$disclaimer;
+        }
+
+        return $reply;
     }
 
     /**
@@ -1168,6 +1235,19 @@ class ChatAgentService
             'lista de espera', 'anotarme en lista', 'anotame en lista', 'ponme en lista',
             'avisame cuando', 'avísame cuando', 'quiero esperar un cupo',
         ]);
+    }
+
+    /**
+     * Cualquier intención operativa (agendar/cancelar/reprogramar/lista de
+     * espera). Solo se usa cuando el perfil de SOLO LECTURA está activo para
+     * desviar los comandos transaccionales directos hacia la orientación.
+     */
+    private function intendsAnyOperation(string $message): bool
+    {
+        return $this->intendsToCancel($message)
+            || $this->intendsToReschedule($message)
+            || $this->intendsWaitlist($message)
+            || $this->intendsToBook($message);
     }
 
     private function looksLikeGreeting(string $message): bool
