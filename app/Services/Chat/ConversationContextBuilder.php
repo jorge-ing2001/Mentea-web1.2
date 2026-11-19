@@ -36,6 +36,7 @@ class ConversationContextBuilder
 {
     public function __construct(
         private KnowledgeBase $knowledge,
+        private ConversationMemoryService $memory,
     ) {}
 
     /**
@@ -194,8 +195,48 @@ class ConversationContextBuilder
                 : 'consentimiento informado: pendiente';
         }
 
-        return 'Contexto del usuario (solo sus propios datos, no clínicos; respeta su rol y permisos): '
+        $block = 'Contexto del usuario (solo sus propios datos, no clínicos; respeta su rol y permisos): '
             .implode('; ', $parts).'.';
+
+        $preferences = $this->preferenceHint($user);
+        if ($preferences !== '') {
+            $block .= ' '.$preferences;
+        }
+
+        return $block;
+    }
+
+    /**
+     * Pista de preferencias de interacción/UI CONSENTIDAS y NO sensibles
+     * (ConversationMemoryService, §2.8). Solo se leen claves de la lista blanca
+     * (response_length/explanation_style/preferred_topic) que el usuario aceptó
+     * explícitamente; nunca contenido clínico. Es una mera pista de REDACCIÓN
+     * para el modelo: no amplía permisos ni altera ninguna regla dura. Para
+     * usuarios sin preferencias devuelve cadena vacía.
+     */
+    private function preferenceHint(User $user): string
+    {
+        $preferences = $this->memory->all($user);
+
+        if ($preferences === []) {
+            return '';
+        }
+
+        $labels = [
+            'response_length' => 'longitud de respuesta preferida',
+            'explanation_style' => 'estilo de explicación preferido',
+            'preferred_topic' => 'tema de interés',
+        ];
+
+        $hints = [];
+        foreach ($preferences as $key => $value) {
+            $label = $labels[$key] ?? $key;
+            $hints[] = "{$label}: ".str_replace('_', ' ', (string) $value);
+        }
+
+        return 'Preferencias de interacción del usuario (consentidas, no clínicas; '
+            .'úsalas solo para ajustar el tono/formato de tu redacción, no como datos): '
+            .implode('; ', $hints).'.';
     }
 
     private function roleLabel(User $user): string

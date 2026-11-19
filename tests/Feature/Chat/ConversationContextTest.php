@@ -8,6 +8,7 @@ use App\Models\Professional;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Services\Chat\ChatAgentService;
+use App\Services\Chat\ConversationMemoryService;
 use App\Services\Chat\ConversationSummaryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
@@ -181,6 +182,53 @@ class ConversationContextTest extends TestCase
         $this->assertSame('¿Qué servicios ofrecen?', $last['content']);
         $this->assertSame('system', $penultimate['role']);
         $this->assertStringContainsString('usando EXACTAMENTE', $penultimate['content']);
+    }
+
+    /**
+     * Las preferencias de interacción CONSENTIDAS y de la lista blanca se
+     * inyectan como pista de redacción en el bloque de identidad (2), de forma
+     * que la memoria de largo plazo (FEAT-005) queda realmente conectada al
+     * contexto del modelo. Nunca cambia ninguna regla dura; es solo una pista.
+     */
+    public function test_consented_preferences_are_injected_into_the_identity_block(): void
+    {
+        $this->seedProfessional();
+        $patient = $this->patient();
+        $conversation = $this->conversationFor($patient);
+
+        app(ConversationMemoryService::class)
+            ->set($patient, 'response_length', 'breve', consented: true);
+
+        $this->fakeOllamaUp('Con gusto, en breve.');
+
+        $this->agent()->handle($conversation, '¿Qué servicios ofrecen?', $patient);
+
+        $messages = $this->phrasingBody('¿Qué servicios ofrecen?')['messages'] ?? [];
+        $this->assertNotEmpty($messages);
+
+        // El bloque (2) de identidad incluye la pista de preferencias.
+        $identity = $messages[1]['content'] ?? '';
+        $this->assertStringContainsString('Preferencias de interacción del usuario', $identity);
+        $this->assertStringContainsString('breve', $identity);
+    }
+
+    /**
+     * Sin preferencias consentidas, el bloque de identidad NO menciona
+     * preferencias: la memoria no fabrica datos.
+     */
+    public function test_identity_block_has_no_preference_hint_without_consent(): void
+    {
+        $this->seedProfessional();
+        $patient = $this->patient();
+        $conversation = $this->conversationFor($patient);
+
+        $this->fakeOllamaUp('Con gusto te oriento.');
+
+        $this->agent()->handle($conversation, '¿Qué servicios ofrecen?', $patient);
+
+        $messages = $this->phrasingBody('¿Qué servicios ofrecen?')['messages'] ?? [];
+        $identity = $messages[1]['content'] ?? '';
+        $this->assertStringNotContainsString('Preferencias de interacción', $identity);
     }
 
     /**

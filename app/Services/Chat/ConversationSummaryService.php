@@ -189,6 +189,18 @@ class ConversationSummaryService
     /**
      * Transcripción compacta de los mensajes para el prompt del resumen.
      *
+     * NOTA DELIBERADA (dato derivado nuevo y persistido): esta transcripción
+     * envía al proveedor el contenido de los turnos user/assistant DE ESTA
+     * MISMA conversación, igual que ya ocurre con la ventana de historial
+     * reciente en cada turno. Nunca se incluye contenido de terceros ni de
+     * otras conversaciones: $messages proviene exclusivamente de
+     * dialogueMessageIds($conversation), acotado por chat_conversation_id. El
+     * resultado (summary) es un dato DERIVADO que se persiste; el prompt de
+     * sistema PIDE al modelo excluir información clínica sensible, pero el
+     * filtrado sensible fuerte sigue siendo responsabilidad del protocolo en
+     * PHP, no del modelo. Si en el futuro se requiere un filtro determinista
+     * previo del contenido a resumir, este es el punto donde aplicarlo.
+     *
      * @param  Collection<int,ChatMessage>  $messages
      */
     private function transcript(Collection $messages): string

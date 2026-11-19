@@ -51,12 +51,19 @@ class ChatController extends Controller
 
         // Idempotencia de reintentos: si este client_message_id ya fue procesado
         // en esta conversación, devolvemos la respuesta previa del asistente sin
-        // volver a crear mensajes ni invocar al agente.
+        // volver a crear mensajes ni invocar al agente. Solo se considera
+        // "ya procesado" cuando el turno del usuario tiene además su respuesta
+        // del asistente: un turno marcado pero SIN respuesta (porque el agente
+        // falló en un intento previo) se reprocesa en lugar de reproducir vacío.
         if ($clientMessageId !== null && $clientMessageId !== '') {
             $existing = $this->repository->findByClientMessageId($conversation, $clientMessageId);
 
             if ($existing !== null) {
-                return $this->replayPreviousReply($conversation, $existing);
+                $reply = $this->replayPreviousReply($conversation, $existing);
+
+                if ($reply !== null) {
+                    return $reply;
+                }
             }
         }
 
@@ -67,6 +74,15 @@ class ChatController extends Controller
                 'conversation_id' => $conversation->id,
                 'error' => $e->getMessage(),
             ]);
+
+            // El agente persiste el turno del usuario ANTES de poder fallar, y
+            // al fallar no hay respuesta del asistente para ese turno. Si
+            // dejáramos ese turno huérfano, un reintento con el mismo
+            // client_message_id crearía un SEGUNDO turno del usuario (duplicado).
+            // Para que el reintento sea seguro y sin duplicados, descartamos el
+            // turno del usuario sin respuesta: el reintento reprocesa el mensaje
+            // desde cero sobre una conversación consistente.
+            $this->discardUnansweredUserTurn($conversation, $clientMessageId);
 
             return response()->json([
                 'reply' => 'Lo siento, tuve un inconveniente para procesar tu mensaje. '
@@ -144,8 +160,12 @@ class ChatController extends Controller
 
     /**
      * Etiqueta el último turno del usuario con su client_message_id (para
-     * idempotencia de futuros reintentos) y actualiza last_message_at,
-     * conservando intacto el last_activity_at que ya escribe el agente.
+     * idempotencia de futuros reintentos) y actualiza las marcas temporales.
+     *
+     * Se actualizan AMBAS columnas: last_message_at (ventana de memoria nueva) y
+     * last_activity_at (compatibilidad: lo mantiene quien depende de la marca
+     * histórica —timeouts de sesión, analítica—). El agente ya refresca
+     * last_activity_at por turno; aquí se reafirma para no dejarla rezagada.
      */
     private function stampTurn(ChatConversation $conversation, ?string $clientMessageId): void
     {
@@ -163,16 +183,51 @@ class ChatController extends Controller
             }
         }
 
-        $conversation->forceFill(['last_message_at' => $now])->save();
+        $conversation->forceFill([
+            'last_message_at' => $now,
+            'last_activity_at' => $now,
+        ])->save();
+    }
+
+    /**
+     * Descarta el turno del usuario que quedó SIN respuesta del asistente tras
+     * un fallo del agente, para que un reintento con el mismo client_message_id
+     * no produzca un turno duplicado. Solo borra el último mensaje del usuario
+     * de la conversación cuando no existe ningún mensaje del asistente posterior.
+     */
+    private function discardUnansweredUserTurn(ChatConversation $conversation, ?string $clientMessageId): void
+    {
+        $lastUser = $conversation->messages()
+            ->where('role', 'user')
+            ->latest('id')
+            ->first();
+
+        if ($lastUser === null) {
+            return;
+        }
+
+        $hasReply = $conversation->messages()
+            ->where('role', 'assistant')
+            ->where('id', '>', $lastUser->id)
+            ->exists();
+
+        if (! $hasReply) {
+            $lastUser->delete();
+        }
     }
 
     /**
      * Reconstruye la respuesta de un turno ya procesado (reintento idempotente):
      * devuelve el contenido del siguiente mensaje del asistente, sin crear filas
-     * nuevas. Las banderas se neutralizan (el estado de crisis/escalado ya se
-     * aplicó en el turno original).
+     * nuevas, RESTITUYENDO las banderas (requires_login/requires_consent/
+     * crisis/escalated) que el turno original persistió en su meta. Así un
+     * reintento no pierde la guía de inicio de sesión o consentimiento.
+     *
+     * Devuelve null cuando el turno del usuario aún no tiene respuesta del
+     * asistente (p. ej. un intento previo falló): en ese caso el llamador debe
+     * reprocesar el mensaje en vez de reproducir una respuesta vacía.
      */
-    private function replayPreviousReply(ChatConversation $conversation, ChatMessage $userMessage): JsonResponse
+    private function replayPreviousReply(ChatConversation $conversation, ChatMessage $userMessage): ?JsonResponse
     {
         $assistant = $conversation->messages()
             ->where('role', 'assistant')
@@ -180,14 +235,20 @@ class ChatController extends Controller
             ->orderBy('id')
             ->first();
 
+        if ($assistant === null) {
+            return null;
+        }
+
+        $flags = is_array($assistant->meta) ? ($assistant->meta['flags'] ?? []) : [];
+
         return response()->json([
-            'reply' => $assistant?->content ?? '',
+            'reply' => $assistant->content ?? '',
             'conversation_id' => $conversation->id,
             'flags' => [
-                'crisis' => false,
-                'escalated' => false,
-                'requires_consent' => false,
-                'requires_login' => false,
+                'crisis' => (bool) ($flags['crisis'] ?? false),
+                'escalated' => (bool) ($flags['escalated'] ?? false),
+                'requires_consent' => (bool) ($flags['requires_consent'] ?? false),
+                'requires_login' => (bool) ($flags['requires_login'] ?? false),
             ],
             'slots' => [],
         ]);

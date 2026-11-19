@@ -1408,7 +1408,25 @@ class ChatAgentService
      */
     private function finish(ChatConversation $conversation, string $reply, array $state): array
     {
-        $this->persist($conversation, 'assistant', $reply, (array) ($state['meta'] ?? []));
+        $crisis = (bool) ($state['crisis'] ?? false);
+        $escalated = (bool) ($state['escalated'] ?? false);
+        $requiresConsent = (bool) ($state['requires_consent'] ?? false);
+        $requiresLogin = (bool) ($state['requires_login'] ?? false);
+
+        // Persistimos las banderas del turno dentro del meta del mensaje del
+        // asistente. Así un reintento idempotente (replayPreviousReply en el
+        // controlador) puede RESTITUIR requires_login/requires_consent en lugar
+        // de perderlas: la guía de inicio de sesión/consentimiento del turno
+        // original no debe desaparecer en silencio al reproducir la respuesta.
+        $meta = (array) ($state['meta'] ?? []);
+        $meta['flags'] = [
+            'crisis' => $crisis,
+            'escalated' => $escalated,
+            'requires_consent' => $requiresConsent,
+            'requires_login' => $requiresLogin,
+        ];
+
+        $this->persist($conversation, 'assistant', $reply, $meta);
 
         // Mantenimiento del resumen progresivo DESPUÉS de persistir el turno.
         // Solo se intenta cuando hay proveedor disponible: con el proveedor
@@ -1422,10 +1440,10 @@ class ChatAgentService
         return [
             'reply' => $reply,
             'conversation_id' => $conversation->id,
-            'crisis' => (bool) ($state['crisis'] ?? false),
-            'escalated' => (bool) ($state['escalated'] ?? false),
-            'requires_consent' => (bool) ($state['requires_consent'] ?? false),
-            'requires_login' => (bool) ($state['requires_login'] ?? false),
+            'crisis' => $crisis,
+            'escalated' => $escalated,
+            'requires_consent' => $requiresConsent,
+            'requires_login' => $requiresLogin,
             'slots' => (array) ($state['slots'] ?? []),
         ];
     }
