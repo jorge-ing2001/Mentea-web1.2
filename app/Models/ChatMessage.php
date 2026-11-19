@@ -15,6 +15,7 @@ class ChatMessage extends Model
         'role',
         'content',
         'meta',
+        'client_message_id',
     ];
 
     protected function casts(): array

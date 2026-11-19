@@ -57,7 +57,67 @@ return [
     'agent_transactional_enabled' => (bool) env('CHAT_AGENT_TRANSACTIONAL', true),
 
     // Cuántos mensajes recientes (user/assistant) se envían al modelo por turno.
+    // Se conserva por compatibilidad hacia atrás; el constructor de contexto
+    // (ConversationContextBuilder) usa 'context_window'.
     'history_window' => (int) env('CHAT_HISTORY_WINDOW', 12),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ventana de contexto + resumen progresivo (optimizado para qwen3:8b)
+    |--------------------------------------------------------------------------
+    |
+    | El constructor de contexto arma el arreglo messages[] en 7 bloques
+    | (prompt del agente, identidad/rol del usuario, reglas de seguridad,
+    | resumen de la conversación, mensajes recientes, RAG y mensaje actual) y
+    | respeta un tope de tokens/caracteres aproximado para no saturar al modelo
+    | local (~4 GB VRAM). El resumen progresivo condensa los turnos ANTIGUOS
+    | (más allá de la ventana reciente) en chat_conversations.summary.
+    */
+
+    // Número de mensajes recientes (user/assistant) que entran en la ventana de
+    // contexto, reemplazando a history_window=12. Valor por defecto 6-8.
+    'context_window' => (int) env('CHAT_CONTEXT_WINDOW', 8),
+
+    // A partir de cuántos mensajes (user/assistant) se genera/actualiza el
+    // resumen incremental de los turnos antiguos.
+    'summary_threshold_messages' => (int) env('CHAT_SUMMARY_THRESHOLD', 12),
+
+    // Interruptor del resumen progresivo. Si se desactiva, el contexto usa solo
+    // la ventana reciente (comportamiento más cercano al histórico).
+    'summary_enabled' => filter_var(env('CHAT_SUMMARY_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+
+    // Tope aproximado (en caracteres) para prompt + reglas + resumen + ventana
+    // reciente + RAG + mensaje actual. El constructor recorta PRIMERO la
+    // ventana reciente (nunca los bloques de sistema/seguridad) para respetarlo.
+    'context_token_budget' => (int) env('CHAT_CONTEXT_TOKEN_BUDGET', 8000),
+
+    // Tope de caracteres del resumen almacenado en chat_conversations.summary.
+    'summary_max_chars' => (int) env('CHAT_SUMMARY_MAX_CHARS', 1500),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Memoria de largo plazo: preferencias NO sensibles y consentidas (§2.8)
+    |--------------------------------------------------------------------------
+    |
+    | Lista blanca EXPLÍCITA de claves de preferencia de interacción/UI que
+    | ConversationMemoryService puede persistir en chat_user_preferences, SOLO
+    | con consentimiento (consented_at) y SOLO con valores del catálogo
+    | permitido. Cualquier clave fuera de esta lista -o cualquier valor fuera
+    | del catálogo de su clave- se RECHAZA y no se persiste nada (regla 7: no
+    | guardar clínico/sensible como memoria permanente). Para una clave de
+    | texto libre acotado (p. ej. una pista de tema preferido) se usa 'text'
+    | como catálogo y el servicio aplica un saneado estricto.
+    */
+    'preference_keys' => [
+        'response_length' => ['breve', 'detallada'],
+        'explanation_style' => ['paso_a_paso', 'resumido'],
+        'preferred_topic' => 'text',
+    ],
+
+    // Tope de caracteres para valores de preferencia de texto libre acotado
+    // (claves cuyo catálogo es 'text'). Mantiene las pistas de UI pequeñas y
+    // no clínicas.
+    'preference_text_max_chars' => (int) env('CHAT_PREFERENCE_TEXT_MAX', 60),
 
     // Tiempo máximo (segundos) de espera a OpenRouter antes de caer al fallback.
     'timeout' => (int) env('CHAT_HTTP_TIMEOUT', 20),

@@ -12,6 +12,8 @@ use App\Http\Controllers\Admin\SurveyController;
 use App\Http\Controllers\Admin\WaitlistController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ChatConversationController;
+use App\Http\Controllers\ChatPreferenceController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Patient\AppointmentController;
@@ -43,6 +45,38 @@ Route::get('/', function () {
 Route::post('/chat', [ChatController::class, 'store'])
     ->middleware('throttle:30,1')
     ->name('chat.send');
+
+// Lectura/gestión de conversaciones del chat (solo usuarios autenticados).
+// Mismo middleware web + throttle que chat.send; cada acción resuelve la
+// conversación acotada por user_id (anti-IDOR) dentro del controlador.
+Route::middleware(['auth', 'throttle:60,1'])->group(function () {
+    Route::get('/chat/conversations', [ChatConversationController::class, 'index'])
+        ->name('chat.conversations.index');
+    Route::post('/chat/conversations', [ChatConversationController::class, 'store'])
+        ->name('chat.conversations.store');
+    Route::get('/chat/conversations/{conversation}', [ChatConversationController::class, 'show'])
+        ->whereNumber('conversation')
+        ->name('chat.conversations.show');
+    Route::patch('/chat/conversations/{conversation}', [ChatConversationController::class, 'update'])
+        ->whereNumber('conversation')
+        ->name('chat.conversations.update');
+    Route::delete('/chat/conversations/{conversation}', [ChatConversationController::class, 'destroy'])
+        ->whereNumber('conversation')
+        ->name('chat.conversations.destroy');
+
+    // Preferencias de interacción (memoria de largo plazo con consentimiento).
+    // Mismo grupo/middleware que chat.conversations.*; el servicio acota por
+    // user_id (anti-IDOR) y exige consentimiento explícito. La clave se limita
+    // al charset de la lista blanca (minúsculas + guion bajo); la validación y
+    // el servicio siguen siendo la compuerta real sobre la clave concreta.
+    Route::get('/chat/preferences', [ChatPreferenceController::class, 'index'])
+        ->name('chat.preferences.index');
+    Route::post('/chat/preferences', [ChatPreferenceController::class, 'store'])
+        ->name('chat.preferences.store');
+    Route::delete('/chat/preferences/{key}', [ChatPreferenceController::class, 'destroy'])
+        ->where('key', '[a-z_]+')
+        ->name('chat.preferences.destroy');
+});
 
 Route::get('/dashboard', function () {
     $user = Auth::user();

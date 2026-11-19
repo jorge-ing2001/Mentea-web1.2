@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Models\Appointment;
+use App\Models\ChatConversation;
 use App\Models\Professional;
 use App\Policies\AppointmentPolicy;
+use App\Policies\ChatConversationPolicy;
 use App\Policies\ProfessionalPolicy;
 use App\Services\Chat\Providers\AiProvider;
 use App\Services\Chat\Providers\AiProviderManager;
@@ -43,5 +45,6 @@ class AppServiceProvider extends ServiceProvider
         // Registrar políticas de autorización
         Gate::policy(Appointment::class, AppointmentPolicy::class);
         Gate::policy(Professional::class, ProfessionalPolicy::class);
+        Gate::policy(ChatConversation::class, ChatConversationPolicy::class);
     }
 }

@@ -42,6 +42,8 @@ class ChatAgentService
         private ChatTools $tools,
         private KnowledgeBase $knowledge,
         private ChatReadTools $readTools,
+        private ConversationContextBuilder $contextBuilder,
+        private ConversationSummaryService $summaryService,
     ) {}
 
     /**
@@ -869,27 +871,18 @@ class ChatAgentService
             return $deterministic;
         }
 
-        // RAG: recupera entre 3 y 6 fragmentos verificados de la base de
-        // conocimiento (nunca el CSV completo) para anclar la redacción del
-        // modelo. Si no hay coincidencias, no se inyecta nada (no mete ruido).
-        $knowledgeBlock = $this->knowledge->contextBlock($userMessage);
-
-        $systemMessages = [['role' => 'system', 'content' => $this->systemPrompt()]];
-
-        if ($knowledgeBlock !== '') {
-            $systemMessages[] = ['role' => 'system', 'content' => $knowledgeBlock];
-        }
-
-        $messages = array_merge(
-            $systemMessages,
-            $conversation->recentHistory((int) config('chat.history_window', 12)),
-            [[
-                'role' => 'system',
-                'content' => 'Responde al usuario en español, de forma cálida y neutra, usando EXACTAMENTE '
-                    .'la siguiente información verificada (no inventes datos, horarios ni servicios): '
-                    .$deterministic,
-            ]],
-            [['role' => 'user', 'content' => $userMessage]],
+        // El ensamblado del contexto (prompt + identidad/seguridad + resumen +
+        // ventana reciente + RAG + mensaje actual) se delega en el constructor
+        // provider-independiente, que respeta el orden §2.4 y el presupuesto de
+        // tokens. La cola (instrucción determinista + mensaje del usuario) se
+        // conserva BYTE A BYTE, por lo que la guardia anti-alucinación de abajo
+        // sigue funcionando igual.
+        $messages = $this->contextBuilder->build(
+            $conversation,
+            $userMessage,
+            $deterministic,
+            $this->systemPrompt(),
+            $user,
         );
 
         $reply = $this->ai->chat($messages);
@@ -1415,15 +1408,42 @@ class ChatAgentService
      */
     private function finish(ChatConversation $conversation, string $reply, array $state): array
     {
-        $this->persist($conversation, 'assistant', $reply, (array) ($state['meta'] ?? []));
+        $crisis = (bool) ($state['crisis'] ?? false);
+        $escalated = (bool) ($state['escalated'] ?? false);
+        $requiresConsent = (bool) ($state['requires_consent'] ?? false);
+        $requiresLogin = (bool) ($state['requires_login'] ?? false);
+
+        // Persistimos las banderas del turno dentro del meta del mensaje del
+        // asistente. Así un reintento idempotente (replayPreviousReply en el
+        // controlador) puede RESTITUIR requires_login/requires_consent en lugar
+        // de perderlas: la guía de inicio de sesión/consentimiento del turno
+        // original no debe desaparecer en silencio al reproducir la respuesta.
+        $meta = (array) ($state['meta'] ?? []);
+        $meta['flags'] = [
+            'crisis' => $crisis,
+            'escalated' => $escalated,
+            'requires_consent' => $requiresConsent,
+            'requires_login' => $requiresLogin,
+        ];
+
+        $this->persist($conversation, 'assistant', $reply, $meta);
+
+        // Mantenimiento del resumen progresivo DESPUÉS de persistir el turno.
+        // Solo se intenta cuando hay proveedor disponible: con el proveedor
+        // caído la ruta determinista queda intacta y no se añade latencia. El
+        // servicio es provider-independiente y nunca altera meta.pending del
+        // último mensaje del asistente (solo escribe la columna summary).
+        if ($this->ai->isAvailable()) {
+            $this->summaryService->summarize($conversation);
+        }
 
         return [
             'reply' => $reply,
             'conversation_id' => $conversation->id,
-            'crisis' => (bool) ($state['crisis'] ?? false),
-            'escalated' => (bool) ($state['escalated'] ?? false),
-            'requires_consent' => (bool) ($state['requires_consent'] ?? false),
-            'requires_login' => (bool) ($state['requires_login'] ?? false),
+            'crisis' => $crisis,
+            'escalated' => $escalated,
+            'requires_consent' => $requiresConsent,
+            'requires_login' => $requiresLogin,
             'slots' => (array) ($state['slots'] ?? []),
         ];
     }
