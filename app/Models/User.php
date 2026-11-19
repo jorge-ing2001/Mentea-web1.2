@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Traits\Auditable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -106,5 +106,10 @@ class User extends Authenticatable
     public function waitlistEntries(): HasMany
     {
         return $this->hasMany(WaitlistEntry::class, 'patient_id');
+    }
+
+    public function chatConversations(): HasMany
+    {
+        return $this->hasMany(ChatConversation::class, 'user_id');
     }
 }
