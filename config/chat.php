@@ -94,6 +94,31 @@ return [
     // Tope de caracteres del resumen almacenado en chat_conversations.summary.
     'summary_max_chars' => (int) env('CHAT_SUMMARY_MAX_CHARS', 1500),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Memoria de largo plazo: preferencias NO sensibles y consentidas (§2.8)
+    |--------------------------------------------------------------------------
+    |
+    | Lista blanca EXPLÍCITA de claves de preferencia de interacción/UI que
+    | ConversationMemoryService puede persistir en chat_user_preferences, SOLO
+    | con consentimiento (consented_at) y SOLO con valores del catálogo
+    | permitido. Cualquier clave fuera de esta lista -o cualquier valor fuera
+    | del catálogo de su clave- se RECHAZA y no se persiste nada (regla 7: no
+    | guardar clínico/sensible como memoria permanente). Para una clave de
+    | texto libre acotado (p. ej. una pista de tema preferido) se usa 'text'
+    | como catálogo y el servicio aplica un saneado estricto.
+    */
+    'preference_keys' => [
+        'response_length' => ['breve', 'detallada'],
+        'explanation_style' => ['paso_a_paso', 'resumido'],
+        'preferred_topic' => 'text',
+    ],
+
+    // Tope de caracteres para valores de preferencia de texto libre acotado
+    // (claves cuyo catálogo es 'text'). Mantiene las pistas de UI pequeñas y
+    // no clínicas.
+    'preference_text_max_chars' => (int) env('CHAT_PREFERENCE_TEXT_MAX', 60),
+
     // Tiempo máximo (segundos) de espera a OpenRouter antes de caer al fallback.
     'timeout' => (int) env('CHAT_HTTP_TIMEOUT', 20),
 
