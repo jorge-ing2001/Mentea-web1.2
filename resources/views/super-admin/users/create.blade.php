@@ -51,18 +51,18 @@
                     </div>
                 </div>
 
-                <div id="patient-fields" class="space-y-3 border-t pt-4">
+                <div id="patient-fields" class="space-y-3 border-t border-slate-200 pt-4">
                     <p class="text-sm font-semibold text-slate-700">Datos de paciente</p>
                     <div class="grid sm:grid-cols-2 gap-3">
                         <div><label class="mentea-label">EPS</label><input name="eps" class="mentea-input" value="{{ old('eps') }}"></div>
                         <div><label class="mentea-label">Contacto emergencia</label><input name="emergency_contact_name" class="mentea-input" value="{{ old('emergency_contact_name') }}"></div>
                         <div><label class="mentea-label">Tel. emergencia</label><input name="emergency_contact_phone" class="mentea-input" value="{{ old('emergency_contact_phone') }}"></div>
                     </div>
-                    <label class="flex gap-2 text-sm"><input type="checkbox" name="consent_informed" value="1" class="rounded text-teal-600"> Consentimiento informado</label>
-                    <label class="flex gap-2 text-sm"><input type="checkbox" name="consent_data" value="1" class="rounded text-teal-600"> Tratamiento de datos (Ley 1581)</label>
+                    <label class="flex gap-2 text-sm"><input type="checkbox" name="consent_informed" value="1" class="rounded border-slate-300 text-mentea-600 focus:ring-mentea-500"> Consentimiento informado</label>
+                    <label class="flex gap-2 text-sm"><input type="checkbox" name="consent_data" value="1" class="rounded border-slate-300 text-mentea-600 focus:ring-mentea-500"> Tratamiento de datos (Ley 1581)</label>
                 </div>
 
-                <div id="pro-fields" class="space-y-3 border-t pt-4 hidden">
+                <div id="pro-fields" class="space-y-3 border-t border-slate-200 pt-4 hidden">
                     <p class="text-sm font-semibold text-slate-700">Datos de profesional</p>
                     <div class="grid sm:grid-cols-2 gap-3">
                         <div><label class="mentea-label">Especialidad</label><input name="specialty" class="mentea-input" value="{{ old('specialty') }}"></div>
@@ -71,7 +71,7 @@
                     </div>
                 </div>
 
-                <label class="flex gap-2 text-sm"><input type="checkbox" name="is_active" value="1" checked class="rounded text-teal-600"> Usuario activo</label>
+                <label class="flex gap-2 text-sm"><input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300 text-mentea-600 focus:ring-mentea-500"> Usuario activo</label>
                 <button type="submit" class="btn-mentea w-full">Crear usuario</button>
             </form>
         </div>

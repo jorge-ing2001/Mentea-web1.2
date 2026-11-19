@@ -8,19 +8,19 @@
                 @csrf
                 @method('PUT')
                 @foreach($permissions as $group => $perms)
-                    <div>
-                        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">{{ $group }}</h3>
+                    <fieldset>
+                        <legend class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{{ $group }}</legend>
                         <div class="grid sm:grid-cols-2 gap-2">
                             @foreach($perms as $perm)
-                                <label class="flex items-center gap-2 text-sm text-slate-700">
+                                <label class="flex items-center gap-2.5 text-sm text-slate-700 rounded-lg px-3 py-2 hover:bg-slate-50 transition cursor-pointer">
                                     <input type="checkbox" name="permissions[]" value="{{ $perm->name }}"
-                                        class="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                        class="rounded border-slate-300 text-mentea-600 focus:ring-mentea-500"
                                         @checked($role->hasPermissionTo($perm->name))>
                                     {{ $perm->name }}
                                 </label>
                             @endforeach
                         </div>
-                    </div>
+                    </fieldset>
                 @endforeach
                 <div class="flex gap-3">
                     <button type="submit" class="btn-mentea">Guardar permisos</button>

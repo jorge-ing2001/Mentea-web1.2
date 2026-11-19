@@ -1,23 +1,23 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Citas</h2>
-            <a href="{{ route('admin.dashboard') }}" class="text-sm text-teal-600 hover:underline">Dashboard</a>
+            <h2 class="mentea-page-title">Citas</h2>
+            <a href="{{ route('admin.dashboard') }}" class="text-sm font-medium text-mentea-600 hover:underline">Dashboard</a>
         </div>
     </x-slot>
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-4">
             @if(session('success'))
-                <div class="mb-4 p-3 bg-green-100 text-green-800 rounded-lg text-sm">{{ session('success') }}</div>
+                <div class="alert-success">{{ session('success') }}</div>
             @endif
-            <form method="GET" class="mb-4 flex flex-wrap gap-2 items-end">
-                <div>
-                    <label class="text-xs text-gray-500">Buscar paciente</label>
-                    <input type="text" name="q" value="{{ request('q') }}" class="border-gray-300 rounded-lg text-sm block">
+            <form method="GET" class="mentea-card p-4 flex flex-wrap gap-3 items-end">
+                <div class="flex-1 min-w-[12rem]">
+                    <label for="q" class="mentea-label">Buscar paciente</label>
+                    <input type="text" id="q" name="q" value="{{ request('q') }}" class="mentea-input">
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500">Estado</label>
-                    <select name="status" class="border-gray-300 rounded-lg text-sm block">
+                    <label for="status" class="mentea-label">Estado</label>
+                    <select id="status" name="status" class="mentea-input">
                         <option value="">Todos</option>
                         @foreach($statuses as $st)
                             <option value="{{ $st->value }}" @selected(request('status')===$st->value)>{{ $st->label() }}</option>
@@ -25,8 +25,8 @@
                     </select>
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500">Profesional</label>
-                    <select name="professional_id" class="border-gray-300 rounded-lg text-sm block">
+                    <label for="professional_id" class="mentea-label">Profesional</label>
+                    <select id="professional_id" name="professional_id" class="mentea-input">
                         <option value="">Todos</option>
                         @foreach($professionals as $pro)
                             <option value="{{ $pro->id }}" @selected(request('professional_id')==$pro->id)>{{ $pro->name }}</option>
@@ -34,56 +34,62 @@
                     </select>
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500">Desde</label>
-                    <input type="date" name="date_from" value="{{ request('date_from') }}" class="border-gray-300 rounded-lg text-sm block">
+                    <label for="date_from" class="mentea-label">Desde</label>
+                    <input type="date" id="date_from" name="date_from" value="{{ request('date_from') }}" class="mentea-input">
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500">Hasta</label>
-                    <input type="date" name="date_to" value="{{ request('date_to') }}" class="border-gray-300 rounded-lg text-sm block">
+                    <label for="date_to" class="mentea-label">Hasta</label>
+                    <input type="date" id="date_to" name="date_to" value="{{ request('date_to') }}" class="mentea-input">
                 </div>
-                <button class="px-3 py-1.5 bg-gray-800 text-white text-sm rounded-lg">Filtrar</button>
+                <button class="btn-mentea">Filtrar</button>
             </form>
-            <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead class="bg-gray-50">
+
+            <div class="mentea-card overflow-x-auto">
+                <table class="mentea-table">
+                    <thead>
                         <tr>
-                            <th class="px-4 py-3 text-left">Fecha</th>
-                            <th class="px-4 py-3 text-left">Paciente</th>
-                            <th class="px-4 py-3 text-left">Profesional</th>
-                            <th class="px-4 py-3 text-left">Modalidad</th>
-                            <th class="px-4 py-3 text-left">Estado</th>
-                            <th class="px-4 py-3 text-right">Acciones</th>
+                            <th>Fecha</th>
+                            <th>Paciente</th>
+                            <th>Profesional</th>
+                            <th>Modalidad</th>
+                            <th>Estado</th>
+                            <th class="text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y">
+                    <tbody>
                         @forelse($appointments as $cita)
                             <tr>
-                                <td class="px-4 py-3 whitespace-nowrap">
+                                <td class="whitespace-nowrap">
                                     {{ $cita->date->format('d/m/Y') }}
-                                    <span class="text-gray-500">{{ \Carbon\Carbon::parse($cita->time)->format('H:i') }}</span>
+                                    <span class="text-slate-500">{{ \Carbon\Carbon::parse($cita->time)->format('H:i') }}</span>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <div class="font-medium">{{ $cita->patient->name ?? '—' }}</div>
-                                    <div class="text-xs text-gray-500">{{ $cita->patient->document_number ?? '' }}</div>
+                                <td>
+                                    <div class="font-medium text-slate-800">{{ $cita->patient->name ?? '—' }}</div>
+                                    <div class="text-xs text-slate-500">{{ $cita->patient->document_number ?? '' }}</div>
                                 </td>
-                                <td class="px-4 py-3">{{ $cita->professional->name ?? '—' }}</td>
-                                <td class="px-4 py-3">{{ $cita->modality->label() }}</td>
-                                <td class="px-4 py-3">
+                                <td>{{ $cita->professional->name ?? '—' }}</td>
+                                <td>{{ $cita->modality->label() }}</td>
+                                <td>
                                     <span class="px-2 py-0.5 text-xs rounded-full bg-{{ $cita->status->color() }}-100 text-{{ $cita->status->color() }}-800">
                                         {{ $cita->status->label() }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3 text-right">
-                                    <a href="{{ route('admin.appointments.show', $cita) }}" class="text-teal-600 hover:underline">Gestionar</a>
+                                <td class="text-right">
+                                    <a href="{{ route('admin.appointments.show', $cita) }}" class="font-medium text-mentea-600 hover:underline">Gestionar</a>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No hay citas con estos filtros.</td></tr>
+                            <tr><td colspan="6">
+                                <div class="mentea-empty-state">
+                                    <x-icon name="calendar" class="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                                    <p>No hay citas con estos filtros.</p>
+                                </div>
+                            </td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <div class="mt-4">{{ $appointments->links() }}</div>
+            <div>{{ $appointments->links() }}</div>
         </div>
     </div>
 </x-app-layout>

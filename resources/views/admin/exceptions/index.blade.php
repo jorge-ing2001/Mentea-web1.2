@@ -9,7 +9,7 @@
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-4">
             @if(session('success'))<div class="alert-success">{{ session('success') }}</div>@endif
             <p class="text-sm text-slate-600">Festivos, ausencias y bloqueos puntuales. No generan citas disponibles.</p>
-            <div class="mentea-card overflow-hidden">
+            <div class="mentea-card overflow-x-auto">
                 <table class="mentea-table">
                     <thead>
                         <tr><th>Fecha</th><th>Tipo</th><th>Profesional</th><th>Horario</th><th>Motivo</th><th></th></tr>
@@ -34,7 +34,12 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center py-8 text-slate-500">Sin excepciones.</td></tr>
+                            <tr><td colspan="6">
+                                <div class="mentea-empty-state">
+                                    <x-icon name="calendar" class="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                                    <p>Sin excepciones.</p>
+                                </div>
+                            </td></tr>
                         @endforelse
                     </tbody>
                 </table>

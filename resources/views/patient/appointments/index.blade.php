@@ -1,67 +1,69 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Mis citas — Mentea</h2>
-            <a href="{{ route('patient.appointments.create') }}"
-               class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
-                + Agendar cita
+        <div class="flex justify-between items-center flex-wrap gap-3">
+            <h2 class="mentea-page-title">Mis citas</h2>
+            <a href="{{ route('patient.appointments.create') }}" class="btn-mentea">
+                <x-icon name="plus" class="w-4 h-4" /> Agendar cita
             </a>
         </div>
     </x-slot>
 
-    <div class="py-8">
-        <div class="max-w-5xl mx-auto sm:px-6 lg:px-8">
-            @if (session('success'))
-                <div class="mb-4 p-4 bg-green-100 text-green-800 rounded-lg">{{ session('success') }}</div>
-            @endif
-            @if (session('error'))
-                <div class="mb-4 p-4 bg-red-100 text-red-800 rounded-lg">{{ session('error') }}</div>
-            @endif
+    <div class="mentea-section">
+        @if (session('success'))
+            <div class="alert-success">{{ session('success') }}</div>
+        @endif
+        @if (session('error'))
+            <div class="alert-error">{{ session('error') }}</div>
+        @endif
 
-            <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
+        <div class="mentea-card overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="mentea-table">
+                    <thead>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profesional</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Modalidad</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                            <th>Fecha</th>
+                            <th>Profesional</th>
+                            <th>Modalidad</th>
+                            <th>Estado</th>
+                            <th class="text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-200">
+                    <tbody>
                         @forelse($appointments as $cita)
                             <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    {{ $cita->date->format('d/m/Y') }}
-                                    <span class="text-gray-500">{{ \Carbon\Carbon::parse($cita->time)->format('H:i') }}</span>
+                                <td class="whitespace-nowrap">
+                                    <span class="font-medium text-slate-800">{{ $cita->date->format('d/m/Y') }}</span>
+                                    <span class="text-slate-500">{{ \Carbon\Carbon::parse($cita->time)->format('H:i') }}</span>
                                 </td>
-                                <td class="px-6 py-4 text-sm">
-                                    <div class="font-medium">{{ $cita->professional->name ?? '—' }}</div>
-                                    <div class="text-gray-500 text-xs">{{ $cita->professional->specialty ?? '' }}</div>
+                                <td>
+                                    <div class="font-medium text-slate-800">{{ $cita->professional->name ?? '—' }}</div>
+                                    <div class="text-slate-500 text-xs">{{ $cita->professional->specialty ?? '' }}</div>
                                 </td>
-                                <td class="px-6 py-4 text-sm">{{ $cita->modality->label() }}</td>
-                                <td class="px-6 py-4">
-                                    <span class="px-2 py-1 text-xs rounded-full bg-{{ $cita->status->color() }}-100 text-{{ $cita->status->color() }}-800">
+                                <td>{{ $cita->modality->label() }}</td>
+                                <td>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full bg-{{ $cita->status->color() }}-100 text-{{ $cita->status->color() }}-800">
                                         {{ $cita->status->label() }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4 text-right text-sm">
-                                    <a href="{{ route('patient.appointments.show', $cita) }}" class="text-teal-600 hover:underline">Ver</a>
+                                <td class="text-right">
+                                    <a href="{{ route('patient.appointments.show', $cita) }}" class="text-mentea-700 font-medium hover:underline">Ver</a>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="px-6 py-12 text-center text-gray-500">
-                                    No tienes citas registradas.
-                                    <a href="{{ route('patient.appointments.create') }}" class="text-teal-600 hover:underline">Agendar la primera</a>
+                                <td colspan="5">
+                                    <div class="mentea-empty-state">
+                                        <span class="mentea-avatar w-12 h-12"><x-icon name="calendar" class="w-6 h-6" /></span>
+                                        <p class="font-medium text-slate-600">No tienes citas registradas</p>
+                                        <a href="{{ route('patient.appointments.create') }}" class="btn-mentea mt-2">Agendar la primera</a>
+                                    </div>
                                 </td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <div class="mt-4">{{ $appointments->links() }}</div>
         </div>
+        <div>{{ $appointments->links() }}</div>
     </div>
 </x-app-layout>

@@ -3,6 +3,7 @@
 <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon/icon-32.png') }}">
 <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon/icon-16.png') }}">
+<link rel="icon" type="image/png" sizes="48x48" href="{{ asset('favicon/icon-48.png') }}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('favicon/icon-180.png') }}">
 <link rel="manifest" href="{{ asset('site.webmanifest') }}">
 <link rel="preconnect" href="https://fonts.bunny.net">

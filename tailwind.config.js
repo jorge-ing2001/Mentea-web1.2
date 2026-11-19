@@ -3,14 +3,21 @@ import forms from '@tailwindcss/forms';
 
 /** @type {import('tailwindcss').Config} */
 export default {
+    darkMode: 'class',
     content: [
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
     ],
+    // Clases de color generadas dinámicamente por los badges de estado
+    // (AppointmentStatus::color() -> yellow|blue|red|green|gray ;
+    //  WaitlistStatus::color() -> amber|blue|green|red|gray), usadas como
+    // `bg-{color}-100 text-{color}-800`. Se incluyen también las intensidades
+    // vecinas y `border-` para no romper el purgado al rediseñar las pills.
     safelist: [
         { pattern: /bg-(yellow|blue|green|red|gray|amber|indigo|emerald|teal|cyan)-(50|100|200|500|600|700|800)/ },
-        { pattern: /text-(yellow|blue|green|red|gray|amber|indigo|emerald|teal|cyan)-(600|700|800)/ },
+        { pattern: /text-(yellow|blue|green|red|gray|amber|indigo|emerald|teal|cyan)-(100|600|700|800)/ },
+        { pattern: /border-(yellow|blue|green|red|gray|amber|indigo|emerald|teal|cyan)-(100|200|300)/ },
     ],
     theme: {
         extend: {

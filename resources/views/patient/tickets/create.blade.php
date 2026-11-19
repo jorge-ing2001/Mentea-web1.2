@@ -6,6 +6,7 @@
         <div class="max-w-lg mx-auto sm:px-6 lg:px-8">
             <form method="POST" action="{{ route('patient.tickets.store') }}" class="mentea-card p-6 space-y-4">
                 @csrf
+                <p class="text-sm text-slate-600">Cuéntanos tu consulta o inconveniente y te responderemos pronto.</p>
                 <div>
                     <label class="mentea-label">Asunto *</label>
                     <input type="text" name="subject" value="{{ old('subject') }}" required class="mentea-input" maxlength="150">

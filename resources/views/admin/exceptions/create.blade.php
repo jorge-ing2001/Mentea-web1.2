@@ -26,7 +26,7 @@
                     <input type="date" name="date" required class="mentea-input" min="{{ date('Y-m-d') }}">
                 </div>
                 <label class="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="full_day" value="1" class="rounded text-teal-600" checked> Día completo
+                    <input type="checkbox" name="full_day" value="1" class="rounded border-slate-300 text-mentea-600 focus:ring-mentea-500" checked> Día completo
                 </label>
                 <div class="grid grid-cols-2 gap-3">
                     <div>

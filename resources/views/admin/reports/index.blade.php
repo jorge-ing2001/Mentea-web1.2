@@ -2,17 +2,17 @@
     <x-slot name="header"><h2 class="mentea-page-title">Reportes</h2></x-slot>
     <div class="py-8">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            <form method="GET" class="flex flex-wrap gap-2 items-end">
+            <form method="GET" class="mentea-card p-4 flex flex-wrap gap-3 items-end">
                 <div>
-                    <label class="mentea-label">Desde</label>
-                    <input type="date" name="from" value="{{ $from->toDateString() }}" class="mentea-input">
+                    <label for="from" class="mentea-label">Desde</label>
+                    <input type="date" id="from" name="from" value="{{ $from->toDateString() }}" class="mentea-input">
                 </div>
                 <div>
-                    <label class="mentea-label">Hasta</label>
-                    <input type="date" name="to" value="{{ $to->toDateString() }}" class="mentea-input">
+                    <label for="to" class="mentea-label">Hasta</label>
+                    <input type="date" id="to" name="to" value="{{ $to->toDateString() }}" class="mentea-input">
                 </div>
                 <button class="btn-mentea">Aplicar</button>
-                <a href="{{ route('admin.reports.export', request()->query()) }}" class="btn-mentea-outline text-sm">Exportar CSV</a>
+                <a href="{{ route('admin.reports.export', request()->query()) }}" class="btn-mentea-outline">Exportar CSV</a>
             </form>
 
             <div class="grid sm:grid-cols-3 gap-4">
@@ -22,7 +22,8 @@
             </div>
 
             <div class="mentea-card p-5">
-                <h3 class="font-semibold mb-3">Ocupación por profesional</h3>
+                <h3 class="font-semibold text-slate-800 mb-3">Ocupación por profesional</h3>
+                <div class="overflow-x-auto">
                 <table class="mentea-table">
                     <thead><tr><th>Profesional</th><th>Total</th><th>Completadas</th><th>No-show</th></tr></thead>
                     <tbody>
@@ -38,11 +39,13 @@
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <div class="mentea-card p-5">
-                <h3 class="font-semibold mb-3">Pacientes en riesgo</h3>
+                <h3 class="font-semibold text-slate-800 mb-3">Pacientes en riesgo</h3>
                 <p class="text-xs text-slate-500 mb-3">≥2 no-shows, ≥3 cancelaciones o bloqueo activo.</p>
+                <div class="overflow-x-auto">
                 <table class="mentea-table">
                     <thead><tr><th>Paciente</th><th>No-shows</th><th>Cancelaciones</th><th>Bloqueo</th></tr></thead>
                     <tbody>
@@ -58,6 +61,7 @@
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>

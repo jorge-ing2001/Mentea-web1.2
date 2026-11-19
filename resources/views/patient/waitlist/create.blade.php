@@ -1,25 +1,27 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Nueva solicitud — Lista de espera</h2>
-            <a href="{{ route('patient.waitlist.index') }}" class="text-sm text-teal-600 hover:underline">Mis solicitudes</a>
+        <div class="flex justify-between items-center flex-wrap gap-3">
+            <h2 class="mentea-page-title">Nueva solicitud · Lista de espera</h2>
+            <a href="{{ route('patient.waitlist.index') }}" class="btn-mentea-outline">Mis solicitudes</a>
         </div>
     </x-slot>
-    <div class="py-8">
-        <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
-            <form method="POST" action="{{ route('patient.waitlist.store') }}" class="bg-white rounded-xl shadow-sm border p-6 space-y-5" id="waitlist-form">
+    <div class="mentea-section">
+        <div class="max-w-2xl mx-auto w-full">
+            <form method="POST" action="{{ route('patient.waitlist.store') }}" class="mentea-card p-6 space-y-5" id="waitlist-form">
                 @csrf
-                <p class="text-sm text-gray-600">Indica tus preferencias. Te avisaremos cuando haya un horario compatible (prioridad por orden de llegada).</p>
+                <div class="rounded-xl bg-mentea-50 border border-mentea-100 p-4 text-sm text-mentea-800">
+                    Indica tus preferencias. Te avisaremos cuando haya un horario compatible (prioridad por orden de llegada).
+                </div>
 
                 @if ($errors->any())
-                    <div class="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                        <ul class="list-disc list-inside">@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
+                    <div class="alert-error">
+                        <ul class="list-disc list-inside space-y-0.5">@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
                     </div>
                 @endif
 
                 <div>
-                    <label class="block text-sm font-medium mb-1">Especialidad *</label>
-                    <select name="specialty" id="specialty" required class="w-full border-gray-300 rounded-lg">
+                    <label for="specialty" class="mentea-label">Especialidad *</label>
+                    <select name="specialty" id="specialty" required class="mentea-input">
                         <option value="">Selecciona</option>
                         @foreach($specialties as $s)
                             <option value="{{ $s }}" @selected(old('specialty')===$s)>{{ $s }}</option>
@@ -28,8 +30,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium mb-1">Profesional</label>
-                    <select name="professional_id" id="professional_id" class="w-full border-gray-300 rounded-lg">
+                    <label for="professional_id" class="mentea-label">Profesional</label>
+                    <select name="professional_id" id="professional_id" class="mentea-input">
                         <option value="">Cualquier profesional</option>
                         @foreach($professionals as $specialty => $pros)
                             @foreach($pros as $pro)
@@ -39,38 +41,38 @@
                             @endforeach
                         @endforeach
                     </select>
-                    <p class="text-xs text-gray-500 mt-1">Si eliges uno específico, solo se mostrarán los de la especialidad seleccionada.</p>
+                    <p class="text-xs text-slate-500 mt-1">Si eliges uno específico, solo se mostrarán los de la especialidad seleccionada.</p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium mb-1">Fecha inicial *</label>
-                        <input type="date" name="date_from" value="{{ old('date_from') }}" min="{{ date('Y-m-d') }}" required class="w-full border-gray-300 rounded-lg">
+                        <label class="mentea-label">Fecha inicial *</label>
+                        <input type="date" name="date_from" value="{{ old('date_from') }}" min="{{ date('Y-m-d') }}" required class="mentea-input">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium mb-1">Fecha final *</label>
-                        <input type="date" name="date_to" value="{{ old('date_to') }}" min="{{ date('Y-m-d') }}" required class="w-full border-gray-300 rounded-lg">
+                        <label class="mentea-label">Fecha final *</label>
+                        <input type="date" name="date_to" value="{{ old('date_to') }}" min="{{ date('Y-m-d') }}" required class="mentea-input">
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium mb-1">Hora desde</label>
-                        <input type="time" name="time_from" value="{{ old('time_from', '08:00') }}" class="w-full border-gray-300 rounded-lg">
+                        <label class="mentea-label">Hora desde</label>
+                        <input type="time" name="time_from" value="{{ old('time_from', '08:00') }}" class="mentea-input">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium mb-1">Hora hasta</label>
-                        <input type="time" name="time_to" value="{{ old('time_to', '12:00') }}" class="w-full border-gray-300 rounded-lg">
+                        <label class="mentea-label">Hora hasta</label>
+                        <input type="time" name="time_to" value="{{ old('time_to', '12:00') }}" class="mentea-input">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium mb-1">Modalidad *</label>
-                    <div class="flex gap-4">
+                    <label class="mentea-label">Modalidad *</label>
+                    <div class="flex flex-wrap gap-4">
                         @foreach($modalities as $mod)
-                            <label class="flex items-center gap-2">
+                            <label class="flex items-center gap-2 text-sm text-slate-700">
                                 <input type="radio" name="modality" value="{{ $mod->value }}" required
-                                    @checked(old('modality', 'presencial') === $mod->value) class="text-teal-600">
+                                    @checked(old('modality', 'presencial') === $mod->value) class="text-mentea-600 focus:ring-mentea-500">
                                 <span>{{ $mod->label() }}</span>
                             </label>
                         @endforeach
@@ -78,11 +80,11 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium mb-1">Notas (opcional)</label>
-                    <textarea name="notes" rows="2" class="w-full border-gray-300 rounded-lg">{{ old('notes') }}</textarea>
+                    <label for="notes" class="mentea-label">Notas (opcional)</label>
+                    <textarea name="notes" id="notes" rows="2" class="mentea-input">{{ old('notes') }}</textarea>
                 </div>
 
-                <button type="submit" class="w-full bg-teal-600 text-white py-2.5 rounded-lg hover:bg-teal-700 font-medium">
+                <button type="submit" class="btn-mentea w-full">
                     Confirmar lista de espera
                 </button>
             </form>
