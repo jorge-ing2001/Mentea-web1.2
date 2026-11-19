@@ -688,6 +688,62 @@ política:
 El parámetro `{conversation}` está restringido con `whereNumber`. Ninguna ruta
 existente se rompe.
 
+#### Preferencias de interacción (memoria consentida)
+
+Dentro del mismo grupo `middleware(['auth', 'throttle:60,1'])` viven los
+endpoints de la **ruta de escritura/consentimiento** de preferencias. Son la
+cara HTTP de `ConversationMemoryService`; el controlador
+(`ChatPreferenceController`) no reimplementa reglas, solo delega en el servicio
+(lista blanca + catálogo + consentimiento + log de denegación).
+
+| Método | Ruta | Nombre | Acción |
+|---|---|---|---|
+| `GET` | `/chat/preferences` | `chat.preferences.index` | listar las preferencias consentidas del usuario |
+| `POST` | `/chat/preferences` | `chat.preferences.store` | guardar/actualizar una preferencia **con consentimiento explícito** |
+| `DELETE` | `/chat/preferences/{key}` | `chat.preferences.destroy` | eliminar una preferencia del usuario |
+
+- **Consentimiento en el momento de la escritura (regla 9).** `store` exige
+  `consented` afirmativo (`required|accepted`) en `StorePreferenceRequest`; sin
+  él la validación falla con `422` y **no se persiste nada**. El servicio
+  (`ConversationMemoryService::set`) vuelve a exigir el consentimiento como
+  compuerta final: el modelo nunca puede guardar una preferencia en silencio.
+- **Lista blanca + catálogo (regla 7).** La `key` debe estar en
+  `config('chat.preference_keys')` y el `value` debe pertenecer al catálogo de
+  esa clave (lista enumerada) o, si el catálogo es `'text'`, ser texto libre
+  acotado a `config('chat.preference_text_max_chars', 60)` y saneado. Cualquier
+  clave fuera de la lista o valor fuera del catálogo se rechaza con `422` sin
+  escribir nada.
+- **Endurecimiento del read-path.** `index` parte de
+  `ConversationMemoryService::all()`, que re-filtra **cada fila** por la lista
+  blanca vigente (misma compuerta que `get()`). Si una clave se retira de
+  `config('chat.preference_keys')`, una fila antigua con esa clave **no vuelve a
+  aflorar** al modelo ni a la UI aunque siga en la base de datos.
+- **Aislamiento por usuario (anti-IDOR, incluido super_admin).** No se acepta
+  ningún `user_id` del cliente. Todas las operaciones se acotan con
+  `$request->user()`, y el servicio filtra cada consulta por `$user->id`. No
+  hay un id crudo que manipular en la URL: `{key}` se restringe a `[a-z_]+` y
+  solo direcciona preferencias del propio usuario. Ni siquiera un super_admin
+  (pese al `Gate::before` global) puede leer, actualizar o borrar las
+  preferencias de otro usuario; `index` devuelve únicamente las suyas y
+  `destroy` responde `404` neutro cuando no hay nada propio que borrar.
+- **Recurso seguro.** `ChatPreferenceResource` expone solo `key`, `value` y
+  `consented_at` (ISO8601); nunca `user_id` ni ids internos.
+- **Log de denegación sin contenido clínico (regla 10).** Cuando el servicio
+  rechaza (sin consentimiento o fuera de catálogo) registra `user_id`, `key` y
+  `reason`, **nunca** el valor rechazado.
+
+El **frontend** (widget Blade + Alpine, §7) añade un panel de **Preferencias**
+`@auth` opcional y no intrusivo que refleja el patrón del panel de historial:
+un control de consentimiento explícito (checkbox) que debe marcarse antes de
+habilitar «Guardar», selectores poblados desde el catálogo inyectado del
+servidor (`config('chat.preference_keys')`, sin campos clínicos codificados en
+el cliente), lista de preferencias guardadas con borrado confirmado, estados de
+carga/error y bloqueo de controles mientras hay una petición en vuelo (sin
+duplicados). Usa el token CSRF (`<meta name="csrf-token">`) y la cabecera
+`X-Requested-With` igual que las llamadas de conversaciones. `localStorage`
+mantiene **solo** estado de UI; la **BD es la fuente de verdad** y los valores
+de preferencia nunca se cachean en el cliente.
+
 ### 10.5 `ChatConversationPolicy` y mapa de las 10 reglas de seguridad
 
 `ChatConversationPolicy` (registrada vía `Gate::policy` en
@@ -765,8 +821,13 @@ La memoria es provider-independiente: `OllamaProvider` (por defecto) y
 | `summary_enabled` | `CHAT_SUMMARY_ENABLED` | `true` | interruptor del resumen progresivo |
 | `context_token_budget` | `CHAT_CONTEXT_TOKEN_BUDGET` | `8000` | tope aproximado (caracteres) del payload total |
 | `summary_max_chars` | `CHAT_SUMMARY_MAX_CHARS` | `1500` | tope del resumen almacenado |
-| `preference_keys` | — | ver config | lista blanca de preferencias consentibles (`response_length`, `explanation_style`, `preferred_topic`) |
-| `preference_text_max_chars` | `CHAT_PREFERENCE_TEXT_MAX` | `60` | tope para valores de preferencia de texto libre acotado |
+| `preference_keys` | — | ver config | lista blanca de preferencias consentibles: mapa `key => catálogo`, donde el catálogo es una lista enumerada o `'text'` (texto libre acotado). Actuales: `response_length` (`breve`/`detallada`), `explanation_style` (`paso_a_paso`/`resumido`), `preferred_topic` (`text`). Rige tanto la escritura (`chat.preferences.store`) como el read-path endurecido de `all()` |
+| `preference_text_max_chars` | `CHAT_PREFERENCE_TEXT_MAX` | `60` | tope para valores de preferencia de texto libre acotado (claves cuyo catálogo es `'text'`) |
+
+La ruta de escritura/consentimiento de preferencias
+(`chat.preferences.index/store/destroy`), el requisito de consentimiento
+explícito en el momento de la escritura, el catálogo/lista blanca y el
+endurecimiento del read-path se documentan en §10.4.
 
 El proveedor por defecto sigue siendo `ollama` en `config/ai.php`
 (`AI_PROVIDER=ollama`); `OpenRouter` queda conservado e inactivo.

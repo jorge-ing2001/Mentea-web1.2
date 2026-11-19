@@ -43,6 +43,16 @@
                         aria-label="Ver conversaciones anteriores"
                         title="Conversaciones anteriores"
                     >&#9776;</button>
+                    {{-- Preferencias de interacción (memoria consentida). Panel
+                         opcional y no intrusivo; solo para usuarios autenticados. --}}
+                    <button
+                        type="button"
+                        class="mentea-chat-icon-btn"
+                        @click="togglePreferences()"
+                        :aria-expanded="showPreferences.toString()"
+                        aria-label="Preferencias de interacción"
+                        title="Preferencias"
+                    >&#9881;</button>
                 @endauth
                 <button type="button" class="mentea-chat-close" @click="open = false" aria-label="Cerrar chat">&times;</button>
             </div>
@@ -70,6 +80,102 @@
                                 <span class="mentea-chat-history-date" x-text="formatDate(conv.last_message_at)"></span>
                             </button>
                             <button type="button" class="mentea-chat-history-del" @click="confirmDelete(conv.id)" aria-label="Eliminar conversación" title="Eliminar">&times;</button>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        @endauth
+
+        {{-- Panel de Preferencias (opt-in, no intrusivo). Deja al usuario
+             autenticado elegir una clave de la LISTA BLANCA y un valor de su
+             catálogo, marcar el consentimiento explícito (requisito de escritura)
+             y guardar/ver/eliminar. El catálogo se inyecta desde el servidor
+             (config('chat.preference_keys')); no se codifican campos clínicos.
+             La BD es la fuente de verdad: localStorage solo guarda estado de UI. --}}
+        @auth
+            <div x-show="showPreferences" x-transition.opacity.duration.150ms class="mentea-chat-prefs" role="menu" aria-label="Preferencias">
+                <div class="mentea-chat-prefs-head">
+                    <span>Tus preferencias</span>
+                </div>
+
+                <p class="mentea-chat-prefs-hint">
+                    Opcional. Solo guardamos preferencias de interacción no sensibles y únicamente
+                    cuando das tu consentimiento explícito.
+                </p>
+
+                {{-- Formulario de alta/actualización. --}}
+                <form class="mentea-chat-prefs-form" @submit.prevent="savePreference()">
+                    <label class="mentea-chat-prefs-label" :for="$id('pref-key')">Preferencia</label>
+                    <select
+                        :id="$id('pref-key')"
+                        class="mentea-chat-prefs-select"
+                        x-model="prefKey"
+                        @change="onPrefKeyChange()"
+                        :disabled="prefSaving"
+                    >
+                        <option value="">Elige una preferencia…</option>
+                        <template x-for="k in prefKeyOptions" :key="k">
+                            <option :value="k" x-text="prefLabel(k)"></option>
+                        </template>
+                    </select>
+
+                    {{-- Catálogo enumerado: selector de valores permitidos. --}}
+                    <template x-if="prefKey !== '' && Array.isArray(prefCatalog[prefKey])">
+                        <select class="mentea-chat-prefs-select" x-model="prefValue" :disabled="prefSaving">
+                            <option value="">Elige un valor…</option>
+                            <template x-for="v in prefCatalog[prefKey]" :key="v">
+                                <option :value="v" x-text="v"></option>
+                            </template>
+                        </select>
+                    </template>
+
+                    {{-- Catálogo de texto libre acotado. --}}
+                    <template x-if="prefKey !== '' && prefCatalog[prefKey] === 'text'">
+                        <input
+                            type="text"
+                            class="mentea-chat-prefs-input"
+                            x-model="prefValue"
+                            :maxlength="prefTextMax"
+                            :disabled="prefSaving"
+                            placeholder="Escribe un valor breve…"
+                            autocomplete="off"
+                        >
+                    </template>
+
+                    {{-- Consentimiento explícito: debe marcarse para habilitar guardar. --}}
+                    <label class="mentea-chat-prefs-consent">
+                        <input type="checkbox" x-model="prefConsent" :disabled="prefSaving">
+                        <span>Doy mi consentimiento para guardar esta preferencia.</span>
+                    </label>
+
+                    <button
+                        type="submit"
+                        class="mentea-chat-prefs-save"
+                        :disabled="prefSaving || !prefConsent || prefKey === '' || prefValue === ''"
+                    >Guardar</button>
+                </form>
+
+                <div x-show="prefSaving" class="mentea-chat-prefs-empty">Guardando…</div>
+                <div x-show="!prefSaving && prefError" class="mentea-chat-prefs-empty mentea-chat-prefs-error" x-text="prefError"></div>
+
+                {{-- Lista de preferencias guardadas. --}}
+                <div x-show="prefLoading" class="mentea-chat-prefs-empty">Cargando…</div>
+                <div x-show="!prefLoading && !prefError && preferences.length === 0" class="mentea-chat-prefs-empty">
+                    Aún no has guardado preferencias.
+                </div>
+                <ul class="mentea-chat-prefs-list">
+                    <template x-for="pref in preferences" :key="pref.key">
+                        <li class="mentea-chat-prefs-item">
+                            <span class="mentea-chat-prefs-item-key" x-text="prefLabel(pref.key)"></span>
+                            <span class="mentea-chat-prefs-item-val" x-text="pref.value"></span>
+                            <button
+                                type="button"
+                                class="mentea-chat-prefs-del"
+                                @click="confirmDeletePreference(pref.key)"
+                                :disabled="prefSaving"
+                                aria-label="Eliminar preferencia"
+                                title="Eliminar"
+                            >&times;</button>
                         </li>
                     </template>
                 </ul>
@@ -145,6 +251,21 @@ function menteaChat() {
         historyLoading: false,
         historyError: '',
         conversations: [],
+
+        // --- Preferencias de interacción (memoria consentida) -----------
+        // El catálogo (lista blanca key => valores|'text') se inyecta desde el
+        // servidor: config('chat.preference_keys'). No se codifican campos
+        // clínicos en el cliente; la validación real vive en el backend.
+        showPreferences: false,
+        prefLoading: false,
+        prefSaving: false,
+        prefError: '',
+        preferences: [],
+        prefCatalog: @js(config('chat.preference_keys', [])),
+        prefTextMax: @js((int) config('chat.preference_text_max_chars', 60)),
+        prefKey: '',
+        prefValue: '',
+        prefConsent: false,
 
         // Auto-scroll: solo se fuerza al final cuando el usuario ya está abajo;
         // si está revisando historial más arriba, se respeta su posición.
@@ -256,6 +377,7 @@ function menteaChat() {
                 this.scrollDown();
             } else {
                 this.showHistory = false;
+                this.showPreferences = false;
             }
         },
 
@@ -351,7 +473,10 @@ function menteaChat() {
         // --- Historial de conversaciones (UX/estados) -------------------
         toggleHistory() {
             this.showHistory = !this.showHistory;
-            if (this.showHistory) { this.loadConversations(); }
+            if (this.showHistory) {
+                this.showPreferences = false;
+                this.loadConversations();
+            }
         },
 
         async loadConversations() {
@@ -441,6 +566,125 @@ function menteaChat() {
                 }
             } catch (e) {
                 this.historyError = 'No pudimos eliminar la conversación.';
+            }
+        },
+
+        // --- Preferencias de interacción (memoria consentida) -----------
+        // Claves disponibles para el selector (orden estable).
+        get prefKeyOptions() {
+            return Object.keys(this.prefCatalog || {});
+        },
+
+        // Etiqueta legible a partir de la clave de la lista blanca.
+        prefLabel(key) {
+            const labels = {
+                response_length: 'Longitud de respuesta',
+                explanation_style: 'Estilo de explicación',
+                preferred_topic: 'Tema preferido',
+            };
+            return labels[key] || key;
+        },
+
+        togglePreferences() {
+            this.showPreferences = !this.showPreferences;
+            if (this.showPreferences) {
+                this.showHistory = false;
+                this.loadPreferences();
+            }
+        },
+
+        // Al cambiar de clave se limpia el valor para no arrastrar uno del
+        // catálogo anterior.
+        onPrefKeyChange() {
+            this.prefValue = '';
+        },
+
+        async loadPreferences() {
+            this.prefLoading = true;
+            this.prefError = '';
+            try {
+                const res = await fetch('{{ url('chat/preferences') }}', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                if (!res.ok) { throw new Error('http ' + res.status); }
+                const data = await res.json();
+                this.preferences = (data && Array.isArray(data.data)) ? data.data : [];
+            } catch (e) {
+                this.prefError = 'No pudimos cargar tus preferencias. Inténtalo de nuevo.';
+                this.preferences = [];
+            } finally {
+                this.prefLoading = false;
+            }
+        },
+
+        // Guarda con consentimiento EXPLÍCITO. El consentimiento se captura en
+        // el momento de la escritura (prefConsent) y se envía como consented:
+        // true; el servidor lo vuelve a exigir (regla 9). Guard anti-duplicados:
+        // no se dispara si ya hay una petición en vuelo.
+        async savePreference() {
+            if (this.prefSaving) { return; }
+            if (!this.prefConsent || this.prefKey === '' || this.prefValue === '') { return; }
+
+            const token = document.querySelector('meta[name="csrf-token"]');
+            this.prefSaving = true;
+            this.prefError = '';
+            try {
+                const res = await fetch('{{ url('chat/preferences') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        key: this.prefKey,
+                        value: this.prefValue,
+                        consented: true,
+                    }),
+                });
+                if (!res.ok) { throw new Error('http ' + res.status); }
+
+                // Reinicia el formulario (el consentimiento se re-marca en cada
+                // escritura) y recarga desde la BD (fuente de verdad).
+                this.prefKey = '';
+                this.prefValue = '';
+                this.prefConsent = false;
+                await this.loadPreferences();
+            } catch (e) {
+                this.prefError = 'No pudimos guardar la preferencia. Revisa el valor e inténtalo de nuevo.';
+            } finally {
+                this.prefSaving = false;
+            }
+        },
+
+        // Confirmación explícita antes de un DELETE destructivo.
+        async confirmDeletePreference(key) {
+            if (this.prefSaving) { return; }
+            if (!window.confirm('¿Eliminar esta preferencia?')) { return; }
+
+            const token = document.querySelector('meta[name="csrf-token"]');
+            this.prefSaving = true;
+            this.prefError = '';
+            try {
+                const res = await fetch('{{ url('chat/preferences') }}/' + encodeURIComponent(key), {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                if (!res.ok) { throw new Error('http ' + res.status); }
+                this.preferences = this.preferences.filter((p) => p.key !== key);
+            } catch (e) {
+                this.prefError = 'No pudimos eliminar la preferencia.';
+            } finally {
+                this.prefSaving = false;
             }
         },
 
