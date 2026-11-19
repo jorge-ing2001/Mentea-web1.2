@@ -862,6 +862,18 @@ html.mentea-reduce-motion *::after {
   background: var(--mentea-mint);
   box-shadow: 0 0 0 3px rgba(167, 243, 208, 0.3);
 }
+/* Indicador de proveedor solo para desarrollo (APP_DEBUG). No se muestra en producción. */
+.mentea-chat-provider {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
 .mentea-chat-close {
   background: none;
   border: none;

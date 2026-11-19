@@ -24,6 +24,11 @@
             <div class="mentea-chat-header-title">
                 <span class="mentea-chat-dot" aria-hidden="true"></span>
                 <span>Asistente de Mentea</span>
+                @if (config('app.debug'))
+                    {{-- Indicador de proveedor solo para desarrollo (APP_DEBUG=true).
+                         No se muestra en producción. Lee config('ai.provider'). --}}
+                    <span class="mentea-chat-provider" title="Proveedor de IA activo (solo desarrollo)">{{ config('ai.provider') }}</span>
+                @endif
             </div>
             <button type="button" class="mentea-chat-close" @click="open = false" aria-label="Cerrar chat">&times;</button>
         </div>

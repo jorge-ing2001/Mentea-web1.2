@@ -19,6 +19,43 @@ return [
     'model' => env('OPENROUTER_MODEL', 'openai/gpt-4o-mini'),
     'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
 
+    /*
+    | Prompt del sistema (filosofía de SOLO LECTURA). Si se deja vacío,
+    | ChatAgentService usa el prompt por defecto codificado (ver §8 de
+    | PLAN-SOLO-LECTURA.md). Se puede sobreescribir por entorno sin tocar código.
+    */
+    'system_prompt' => env('CHAT_SYSTEM_PROMPT', ''),
+
+    /*
+    | Ruta del CSV de la base de conocimiento (RAG). Editable sin cambiar código;
+    | KnowledgeBase lo lee en tiempo de ejecución y recupera 3-6 fragmentos por
+    | consulta (nunca el archivo completo).
+    */
+    'knowledge_base_path' => env('CHAT_KNOWLEDGE_BASE_PATH', base_path('docs/agente/base-conocimiento.csv')),
+
+    /*
+    | Perfil del agente respecto a operaciones transaccionales.
+    |
+    | PLAN-SOLO-LECTURA §3/§7 pide un agente ESTRICTAMENTE de solo lectura (el
+    | usuario ejecuta cancelar/reprogramar/agendar/lista de espera en los
+    | módulos; el agente solo orienta y enlaza). Las ramas transaccionales
+    | heredadas (handleCancel/handleReschedule/handleWaitlist y la resolución de
+    | ofertas pendientes) se conservan por compatibilidad y para no desactivar
+    | la suite existente, pero quedan gateadas por esta bandera:
+    |
+    |   - true  (por defecto): comportamiento histórico; los comandos directos
+    |            ("Quiero cancelar mi cita") ejecutan vía los servicios de
+    |            negocio. La orientación de solo lectura ("¿cómo cancelo?") sigue
+    |            interceptando las frases de procedimiento.
+    |   - false (perfil solo lectura): las ramas transaccionales se desactivan;
+    |            TODA intención operativa se enruta a la orientación de solo
+    |            lectura (pasos + enlace interno verificado), sin tocar la BD.
+    |
+    | Se puede activar el perfil solo lectura por entorno sin tocar código:
+    | CHAT_AGENT_TRANSACTIONAL=false.
+    */
+    'agent_transactional_enabled' => (bool) env('CHAT_AGENT_TRANSACTIONAL', true),
+
     // Cuántos mensajes recientes (user/assistant) se envían al modelo por turno.
     'history_window' => (int) env('CHAT_HISTORY_WINDOW', 12),
 

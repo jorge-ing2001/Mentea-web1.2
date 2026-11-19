@@ -11,6 +11,7 @@ use App\Models\Professional;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AvailabilityService;
+use App\Services\Chat\Providers\AiProvider;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -30,14 +31,17 @@ use Illuminate\Validation\ValidationException;
  *   4. Cupo/redacción-> solo slots reales de AvailabilityService; la reserva
  *                       pasa por AppointmentService (re-valida y transacciona).
  *
- * Si no hay OPENROUTER_API_KEY o la red falla, se usa una ruta determinista
- * que aplica exactamente las mismas reglas duras. La app nunca se cae.
+ * Si el proveedor de IA activo no está disponible o la red falla, se usa una
+ * ruta determinista que aplica exactamente las mismas reglas duras. La app
+ * nunca se cae.
  */
 class ChatAgentService
 {
     public function __construct(
-        private OpenRouterClient $openRouter,
+        private AiProvider $ai,
         private ChatTools $tools,
+        private KnowledgeBase $knowledge,
+        private ChatReadTools $readTools,
     ) {}
 
     /**
@@ -85,32 +89,57 @@ class ChatAgentService
             ]);
         }
 
+        // Perfil del agente: con el perfil de SOLO LECTURA activo
+        // (config('chat.agent_transactional_enabled') === false) se desactivan
+        // TODAS las ramas transaccionales (resolución de ofertas pendientes y
+        // cancelar/reprogramar/agendar/lista de espera). Cualquier intención
+        // operativa se enruta entonces a la orientación de solo lectura (pasos +
+        // enlace interno verificado), sin tocar la BD. Por defecto la bandera es
+        // true y se conserva el comportamiento transaccional histórico.
+        $transactional = (bool) config('chat.agent_transactional_enabled', true);
+
         // 4) Seguimiento de una acción pendiente (confirmar un cupo ofrecido o
         //    una reprogramación). Requiere paciente autenticado con consentimiento.
-        if ($pending !== null && $this->isAuthenticatedPatientWithConsent($user)) {
+        if ($transactional && $pending !== null && $this->isAuthenticatedPatientWithConsent($user)) {
             $resolved = $this->resolvePendingAction($conversation, $pending, $userMessage, $user);
             if ($resolved !== null) {
                 return $resolved;
             }
         }
 
+        // 4.5) SOLO LECTURA: orientación/redirección. Si el usuario pregunta
+        //      CÓMO/DÓNDE hacer algo (no emite un comando transaccional directo),
+        //      se explica el procedimiento y se entrega el enlace interno
+        //      verificado según su rol. No ejecuta ni altera nada. Se evalúa
+        //      antes de las ramas transaccionales SOLO para frases de tipo
+        //      "cómo/dónde" (los comandos directos siguen su ruta habitual).
+        if ($this->intendsOrientation($userMessage)) {
+            return $this->handleOrientation($conversation, $userMessage, $user);
+        }
+
+        // Perfil SOLO LECTURA: toda intención operativa (cancelar/reprogramar/
+        // agendar/lista de espera) se responde con orientación, nunca ejecutando.
+        if (! $transactional && $this->intendsAnyOperation($userMessage)) {
+            return $this->handleOrientation($conversation, $userMessage, $user);
+        }
+
         // 5) Cancelar una cita existente a través del agente.
-        if ($this->intendsToCancel($userMessage)) {
+        if ($transactional && $this->intendsToCancel($userMessage)) {
             return $this->handleCancel($conversation, $userMessage, $user);
         }
 
         // 6) Reprogramar una cita existente a través del agente.
-        if ($this->intendsToReschedule($userMessage)) {
+        if ($transactional && $this->intendsToReschedule($userMessage)) {
             return $this->handleReschedule($conversation, $userMessage, $user);
         }
 
         // 7) Alta explícita en lista de espera.
-        if ($this->intendsWaitlist($userMessage)) {
+        if ($transactional && $this->intendsWaitlist($userMessage)) {
             return $this->handleWaitlist($conversation, $userMessage, $user);
         }
 
         // 8) REGLA DURA: consentimiento antes de recolectar datos / agendar.
-        if ($this->intendsToBook($userMessage)) {
+        if ($transactional && $this->intendsToBook($userMessage)) {
             $gate = $this->bookingGate($conversation, $user);
             if ($gate !== null) {
                 return $gate;
@@ -420,6 +449,178 @@ class ChatAgentService
         return $this->finish($conversation, $reply, ['meta' => ['reason' => 'waitlisted']]);
     }
 
+    /**
+     * SOLO LECTURA: responde a una pregunta de orientación ("¿cómo...?",
+     * "¿dónde...?") explicando el procedimiento y entregando un enlace interno
+     * VERIFICADO según el rol del usuario autenticado. No ejecuta la operación:
+     * el usuario la realiza personalmente en el módulo. Cero escrituras en BD.
+     *
+     * @return array<string,mixed>
+     */
+    private function handleOrientation(ChatConversation $conversation, string $message, ?User $user): array
+    {
+        $role = $this->roleOf($user);
+
+        $help = $this->readTools->getModuleHelp($message, $role);
+
+        $steps = $this->orientationSteps($message, $role);
+
+        $parts = [];
+
+        if ($steps !== '') {
+            $parts[] = $steps;
+        } elseif (is_string($help['text']) && $help['text'] !== '') {
+            $parts[] = $help['text'];
+        } else {
+            $parts[] = 'Puedo explicarte cómo hacerlo desde la plataforma.';
+        }
+
+        $verifiedUrl = is_string($help['url']) && $help['url'] !== '' ? $help['url'] : null;
+
+        if ($verifiedUrl !== null) {
+            $parts[] = 'Aquí tienes el acceso directo: '.$verifiedUrl;
+        } elseif ($role === null) {
+            $parts[] = 'Para acceder al módulo necesitas iniciar sesión con tu cuenta.';
+        }
+
+        // Aclaración de solo lectura: el usuario ejecuta la acción.
+        $disclaimer = 'Recuerda que la acción debes realizarla tú desde ese módulo; yo solo te oriento.';
+        $parts[] = $disclaimer;
+
+        $deterministic = implode(' ', $parts);
+        $reply = $this->phrase($conversation, $message, $deterministic, $user);
+
+        // Garantía de redirección de SOLO LECTURA: el enlace interno verificado
+        // y la aclaración "la acción la realizas tú" son el núcleo de la
+        // orientación. phrase() solo ancla horas/fechas/nombres, no la URL ni la
+        // aclaración, así que el modelo podría omitirlas al reformular. Las
+        // re-anclamos de forma determinista para que SIEMPRE sobrevivan a la
+        // redacción del modelo. Nunca se inventa una URL: solo se re-adjunta el
+        // enlace ya verificado por ChatLinks (Route::has) para este rol.
+        $reply = $this->ensureOrientationAnchors($reply, $verifiedUrl, $disclaimer);
+
+        return $this->finish($conversation, $reply, [
+            'meta' => [
+                'reason' => 'orientation',
+                'url' => $help['url'],
+                'route' => $help['route'],
+            ],
+        ]);
+    }
+
+    /**
+     * Re-ancla de forma determinista los dos elementos irrenunciables de una
+     * respuesta de orientación de SOLO LECTURA: (1) el enlace interno verificado
+     * y (2) la aclaración de que el usuario ejecuta la acción. Si el modelo los
+     * conservó al reformular, no se duplica nada; si los omitió, se re-adjuntan.
+     * No inventa URLs: solo re-adjunta la ruta ya verificada (o ninguna si no
+     * había enlace aplicable al rol).
+     */
+    private function ensureOrientationAnchors(string $reply, ?string $verifiedUrl, string $disclaimer): string
+    {
+        $reply = rtrim($reply);
+
+        // Se compara por la RUTA (path) del enlace, no por la URL absoluta: el
+        // modelo puede reformular usando la forma relativa ("/paciente/citas")
+        // mientras ChatLinks entrega la forma absoluta. Si la ruta ya aparece
+        // (en cualquiera de las dos formas) no se re-adjunta, para no duplicar.
+        if ($verifiedUrl !== null) {
+            $path = parse_url($verifiedUrl, PHP_URL_PATH);
+            $alreadyLinked = str_contains($reply, $verifiedUrl)
+                || (is_string($path) && $path !== '' && str_contains($reply, $path));
+
+            if (! $alreadyLinked) {
+                $reply = rtrim($reply).' Aquí tienes el acceso directo: '.$verifiedUrl;
+            }
+        }
+
+        // La aclaración se da por presente si el modelo mantuvo la idea de que
+        // la acción la realiza el usuario (token "tú"/"ti"); si no, se re-adjunta
+        // el texto determinista completo.
+        $normalizedReply = $this->normalize($reply);
+        if (! str_contains($normalizedReply, 'realizarla tu')
+            && ! str_contains($normalizedReply, 'debes realizarla')
+            && ! str_contains($normalizedReply, ' tu desde')
+            && ! str_contains($normalizedReply, 'la realizas tu')) {
+            $reply = rtrim($reply).' '.$disclaimer;
+        }
+
+        return $reply;
+    }
+
+    /**
+     * Pasos de procedimiento deterministas por intención y rol (solo lectura).
+     * No inventa: si no reconoce la operación, devuelve cadena vacía y el
+     * llamador cae a la base de conocimiento.
+     */
+    private function orientationSteps(string $message, ?string $role): string
+    {
+        $norm = $this->normalize($message);
+
+        if ($role === 'patient' || $role === null) {
+            if (str_contains($norm, 'cancel')) {
+                return 'Para cancelar una cita: entra a "Mis citas", abre la cita y usa el botón "Cancelar cita". '
+                    .'Recuerda la política de anticipación (al menos 5 días).';
+            }
+
+            if (str_contains($norm, 'reprogram') || str_contains($norm, 'reagend') || str_contains($norm, 'mover')) {
+                return 'Para reprogramar una cita: entra a "Mis citas", abre la cita y elige "Reprogramar". '
+                    .'Solo es posible dentro de las primeras 24 horas desde que se agendó.';
+            }
+
+            if (str_contains($norm, 'lista de espera') || str_contains($norm, 'espera')) {
+                return 'Para anotarte en la lista de espera: entra a "Lista de espera" y crea una nueva solicitud. '
+                    .'Te avisaremos cuando se libere un cupo compatible.';
+            }
+
+            if (str_contains($norm, 'agend') || str_contains($norm, 'reserv') || str_contains($norm, 'cita')) {
+                return 'Para agendar una cita: inicia sesión como paciente con el consentimiento aceptado, '
+                    .'entra a "Agendar cita", elige el servicio y profesional, y selecciona un cupo disponible.';
+            }
+
+            if (str_contains($norm, 'perfil') || str_contains($norm, 'consentimiento')) {
+                return 'Para revisar o actualizar tu perfil y el consentimiento de datos, entra a tu perfil.';
+            }
+        }
+
+        if ($role === 'professional') {
+            if (str_contains($norm, 'agenda') || str_contains($norm, 'cita')) {
+                return 'Para ver tu agenda: entra a "Mis citas" en tu panel de profesional.';
+            }
+
+            if (str_contains($norm, 'calendario')) {
+                return 'Para ver tu calendario: entra a "Calendario" en tu panel de profesional.';
+            }
+        }
+
+        if ($role === 'admin' || $role === 'super_admin') {
+            if (str_contains($norm, 'cita')) {
+                return 'Para gestionar citas: entra al módulo de "Citas" del panel de administración.';
+            }
+
+            if (str_contains($norm, 'lista de espera') || str_contains($norm, 'espera')) {
+                return 'Para gestionar la lista de espera: entra al módulo de "Lista de espera" del panel de administración.';
+            }
+        }
+
+        return '';
+    }
+
+    private function roleOf(?User $user): ?string
+    {
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        return match (true) {
+            $user->isSuperAdmin() => 'super_admin',
+            $user->isAdmin() => 'admin',
+            $user->isProfessional() => 'professional',
+            $user->isPatient() => 'patient',
+            default => null,
+        };
+    }
+
     private function nextCancellableAppointment(User $user): ?Appointment
     {
         return $user->appointmentsAsPatient()
@@ -658,18 +859,29 @@ class ChatAgentService
     }
 
     /**
-     * Si OpenRouter está configurado, se le pide que REDACTE a partir del texto
-     * determinista ya calculado (nunca decide reglas ni datos). Si no, devuelve
-     * el determinista tal cual.
+     * Si el proveedor de IA está disponible, se le pide que REDACTE a partir
+     * del texto determinista ya calculado (nunca decide reglas ni datos). Si
+     * no, devuelve el determinista tal cual.
      */
     private function phrase(ChatConversation $conversation, string $userMessage, string $deterministic, ?User $user): string
     {
-        if (! $this->openRouter->isConfigured()) {
+        if (! $this->ai->isAvailable()) {
             return $deterministic;
         }
 
+        // RAG: recupera entre 3 y 6 fragmentos verificados de la base de
+        // conocimiento (nunca el CSV completo) para anclar la redacción del
+        // modelo. Si no hay coincidencias, no se inyecta nada (no mete ruido).
+        $knowledgeBlock = $this->knowledge->contextBlock($userMessage);
+
+        $systemMessages = [['role' => 'system', 'content' => $this->systemPrompt()]];
+
+        if ($knowledgeBlock !== '') {
+            $systemMessages[] = ['role' => 'system', 'content' => $knowledgeBlock];
+        }
+
         $messages = array_merge(
-            [['role' => 'system', 'content' => $this->systemPrompt()]],
+            $systemMessages,
             $conversation->recentHistory((int) config('chat.history_window', 12)),
             [[
                 'role' => 'system',
@@ -680,7 +892,7 @@ class ChatAgentService
             [['role' => 'user', 'content' => $userMessage]],
         );
 
-        $reply = $this->openRouter->chat($messages);
+        $reply = $this->ai->chat($messages);
 
         if ($reply === null || trim($reply) === '') {
             return $deterministic;
@@ -883,11 +1095,11 @@ class ChatAgentService
             return false;
         }
 
-        if (! $this->openRouter->isConfigured()) {
+        if (! $this->ai->isAvailable()) {
             return false;
         }
 
-        $raw = $this->openRouter->classify((string) config('chat.crisis_classifier_prompt', ''), $message);
+        $raw = $this->ai->classify((string) config('chat.crisis_classifier_prompt', ''), $message);
 
         if (! is_string($raw) || trim($raw) === '') {
             return false;
@@ -987,12 +1199,55 @@ class ChatAgentService
         ]);
     }
 
+    /**
+     * Intención de ORIENTACIÓN (solo lectura): el usuario pregunta CÓMO/DÓNDE
+     * hacer algo, o dónde encontrar un módulo. No es un comando transaccional;
+     * se responde con pasos + enlace interno verificado. Deliberadamente se
+     * ancla a interrogativos de procedimiento ("cómo", "dónde", "cómo hago")
+     * para no invadir el flujo transaccional existente.
+     */
+    private function intendsOrientation(string $message): bool
+    {
+        $hasHowWhere = $this->matchesAny($message, [
+            'como', 'cómo', 'donde', 'dónde', 'de que forma', 'de qué forma',
+            'que pasos', 'qué pasos', 'como hago', 'cómo hago', 'como puedo',
+            'cómo puedo', 'como funciona', 'cómo funciona', 'quiero saber como',
+            'me explicas', 'explicame', 'explícame', 'guiame', 'guíame',
+        ]);
+
+        if (! $hasHowWhere) {
+            return false;
+        }
+
+        // Debe referirse a una operación/módulo orientable.
+        return $this->matchesAny($message, [
+            'agendar', 'agenda', 'cita', 'citas', 'reservar', 'turno',
+            'cancelar', 'reprogramar', 'reagendar', 'mover',
+            'lista de espera', 'espera', 'calendario', 'perfil', 'consentimiento',
+            'horario', 'horarios', 'usuarios', 'roles', 'configuracion', 'configuración',
+            'documentos', 'modulo', 'módulo', 'plataforma',
+        ]);
+    }
+
     private function intendsWaitlist(string $message): bool
     {
         return $this->matchesAny($message, [
             'lista de espera', 'anotarme en lista', 'anotame en lista', 'ponme en lista',
             'avisame cuando', 'avísame cuando', 'quiero esperar un cupo',
         ]);
+    }
+
+    /**
+     * Cualquier intención operativa (agendar/cancelar/reprogramar/lista de
+     * espera). Solo se usa cuando el perfil de SOLO LECTURA está activo para
+     * desviar los comandos transaccionales directos hacia la orientación.
+     */
+    private function intendsAnyOperation(string $message): bool
+    {
+        return $this->intendsToCancel($message)
+            || $this->intendsToReschedule($message)
+            || $this->intendsWaitlist($message)
+            || $this->intendsToBook($message);
     }
 
     private function looksLikeGreeting(string $message): bool
@@ -1123,12 +1378,22 @@ class ChatAgentService
 
     private function systemPrompt(): string
     {
-        return 'Eres el asistente conversacional de Mentea, un hospital de salud mental en Colombia. '
-            .'Hablas siempre en español, con tono cálido, respetuoso y neutro por privacidad. '
-            .'NO diagnosticas ni das consejo clínico. NUNCA inventas horarios, profesionales ni servicios: '
-            .'solo usas la información verificada que te entrega el sistema. Pides consentimiento de datos '
-            .'(Ley 1581 de 2012) antes de agendar. Ante señales de crisis entregas el protocolo de crisis y '
-            .'escalas a una persona. Tu rol es redactar con claridad, no decidir reglas de negocio.';
+        $override = (string) config('chat.system_prompt', '');
+
+        if (trim($override) !== '') {
+            return $override;
+        }
+
+        return 'Eres Mentea AI, el asistente institucional de la plataforma Mentea (salud mental, articulada '
+            .'con el Hospital Especializado Granja Integral de Lérida, Tolima). Tu función es ORIENTAR, ENSEÑAR '
+            .'y CONSULTAR información autorizada; NO ejecutas operaciones. El usuario realiza personalmente '
+            .'cualquier acción (agendar, cancelar, reprogramar) desde los módulos de la plataforma; tú explicas '
+            .'el procedimiento y entregas el enlace interno verificado. Usas EXCLUSIVAMENTE la información '
+            .'verificada que te entrega el sistema y la base de conocimiento; no inventas servicios, '
+            .'profesionales, citas, estados ni disponibilidad. Respetas el rol y los permisos del usuario '
+            .'autenticado y nunca muestras datos de otros pacientes. Ante señales de crisis aplicas el protocolo '
+            .'de seguridad (líneas 123/106 + derivación humana). No diagnosticas ni aconsejas clínicamente. '
+            .'Si no tienes un dato autorizado, lo dices con claridad. Respondes siempre en español.';
     }
 
     // ---- Persistencia ----------------------------------------------------
