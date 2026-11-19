@@ -6,6 +6,8 @@ use App\Models\Appointment;
 use App\Models\Professional;
 use App\Policies\AppointmentPolicy;
 use App\Policies\ProfessionalPolicy;
+use App\Services\Chat\Providers\AiProvider;
+use App\Services\Chat\Providers\AiProviderManager;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -14,7 +16,13 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // El agente depende de la interfaz AiProvider; el manager elige la
+        // implementación concreta (Ollama por defecto, OpenRouter si se
+        // configura) según config('ai.provider').
+        $this->app->bind(
+            AiProvider::class,
+            fn ($app) => $app->make(AiProviderManager::class)->provider()
+        );
     }
 
     public function boot(): void

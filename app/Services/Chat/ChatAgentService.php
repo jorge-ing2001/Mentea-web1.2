@@ -11,6 +11,7 @@ use App\Models\Professional;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AvailabilityService;
+use App\Services\Chat\Providers\AiProvider;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -30,13 +31,14 @@ use Illuminate\Validation\ValidationException;
  *   4. Cupo/redacción-> solo slots reales de AvailabilityService; la reserva
  *                       pasa por AppointmentService (re-valida y transacciona).
  *
- * Si no hay OPENROUTER_API_KEY o la red falla, se usa una ruta determinista
- * que aplica exactamente las mismas reglas duras. La app nunca se cae.
+ * Si el proveedor de IA activo no está disponible o la red falla, se usa una
+ * ruta determinista que aplica exactamente las mismas reglas duras. La app
+ * nunca se cae.
  */
 class ChatAgentService
 {
     public function __construct(
-        private OpenRouterClient $openRouter,
+        private AiProvider $ai,
         private ChatTools $tools,
     ) {}
 
@@ -658,13 +660,13 @@ class ChatAgentService
     }
 
     /**
-     * Si OpenRouter está configurado, se le pide que REDACTE a partir del texto
-     * determinista ya calculado (nunca decide reglas ni datos). Si no, devuelve
-     * el determinista tal cual.
+     * Si el proveedor de IA está disponible, se le pide que REDACTE a partir
+     * del texto determinista ya calculado (nunca decide reglas ni datos). Si
+     * no, devuelve el determinista tal cual.
      */
     private function phrase(ChatConversation $conversation, string $userMessage, string $deterministic, ?User $user): string
     {
-        if (! $this->openRouter->isConfigured()) {
+        if (! $this->ai->isAvailable()) {
             return $deterministic;
         }
 
@@ -680,7 +682,7 @@ class ChatAgentService
             [['role' => 'user', 'content' => $userMessage]],
         );
 
-        $reply = $this->openRouter->chat($messages);
+        $reply = $this->ai->chat($messages);
 
         if ($reply === null || trim($reply) === '') {
             return $deterministic;
@@ -883,11 +885,11 @@ class ChatAgentService
             return false;
         }
 
-        if (! $this->openRouter->isConfigured()) {
+        if (! $this->ai->isAvailable()) {
             return false;
         }
 
-        $raw = $this->openRouter->classify((string) config('chat.crisis_classifier_prompt', ''), $message);
+        $raw = $this->ai->classify((string) config('chat.crisis_classifier_prompt', ''), $message);
 
         if (! is_string($raw) || trim($raw) === '') {
             return false;
