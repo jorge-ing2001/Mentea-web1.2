@@ -45,14 +45,37 @@ class ConversationMemoryService
     /**
      * Todas las preferencias consentidas del usuario como mapa key => value.
      *
+     * Se re-filtra CADA fila por la lista blanca actual (misma compuerta que
+     * usa get() vía isAllowedKey). Así, si una clave se retira después de
+     * config('chat.preference_keys'), una fila antigua con esa clave NO vuelve
+     * a aflorar al modelo/UI aunque siga en la base de datos.
+     *
      * @return array<string,string>
      */
     public function all(User $user): array
     {
-        return ChatUserPreference::query()
+        $preferences = ChatUserPreference::query()
             ->where('user_id', $user->id)
             ->pluck('value', 'key')
             ->all();
+
+        return array_filter(
+            $preferences,
+            fn (string $key): bool => $this->isAllowedKey($key),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
+    /**
+     * Catálogo normalizado de la lista blanca para la capa HTTP (FormRequest /
+     * Resource): clave => catálogo de valores (array enumerado) o 'text'. No
+     * duplica reglas: set()/canStore() siguen siendo la compuerta final.
+     *
+     * @return array<string,array<int,string>|string>
+     */
+    public function allowedKeys(): array
+    {
+        return $this->allowList();
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\WaitlistController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ChatConversationController;
+use App\Http\Controllers\ChatPreferenceController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Patient\AppointmentController;
@@ -62,6 +63,19 @@ Route::middleware(['auth', 'throttle:60,1'])->group(function () {
     Route::delete('/chat/conversations/{conversation}', [ChatConversationController::class, 'destroy'])
         ->whereNumber('conversation')
         ->name('chat.conversations.destroy');
+
+    // Preferencias de interacción (memoria de largo plazo con consentimiento).
+    // Mismo grupo/middleware que chat.conversations.*; el servicio acota por
+    // user_id (anti-IDOR) y exige consentimiento explícito. La clave se limita
+    // al charset de la lista blanca (minúsculas + guion bajo); la validación y
+    // el servicio siguen siendo la compuerta real sobre la clave concreta.
+    Route::get('/chat/preferences', [ChatPreferenceController::class, 'index'])
+        ->name('chat.preferences.index');
+    Route::post('/chat/preferences', [ChatPreferenceController::class, 'store'])
+        ->name('chat.preferences.store');
+    Route::delete('/chat/preferences/{key}', [ChatPreferenceController::class, 'destroy'])
+        ->where('key', '[a-z_]+')
+        ->name('chat.preferences.destroy');
 });
 
 Route::get('/dashboard', function () {
