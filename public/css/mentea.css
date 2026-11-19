@@ -903,20 +903,144 @@ html.mentea-reduce-motion *::after {
   line-height: 1.35;
   white-space: pre-line;
   word-wrap: break-word;
+  /* UX 4 — respuestas largas: cada burbuja se contiene con altura máxima y
+     scroll interno para que una sola respuesta no domine el panel. */
+  max-height: 16rem;
+  overflow-y: auto;
 }
+.mentea-chat-typing { max-height: none; overflow: visible; }
 .mentea-chat-msg-user {
   align-self: flex-end;
+  /* UX 3 — diferenciación: usuario con el color de marca sólido, alineado a la
+     derecha y con sombra sutil para separarlo del fondo claro. */
   background: var(--mentea-600);
   color: #fff;
+  border: 1px solid var(--mentea-700, var(--mentea-600));
   border-bottom-right-radius: 0.25rem;
+  box-shadow: 0 1px 2px rgba(5, 59, 80, 0.18);
 }
 .mentea-chat-msg-bot {
   align-self: flex-start;
+  /* UX 3 — asistente con superficie blanca y borde/acento a la izquierda, claro
+     contraste frente a la burbuja del usuario sin salir de la paleta. */
   background: #fff;
   color: var(--mentea-gray);
   border: 1px solid var(--slate-200);
+  border-left: 3px solid var(--mentea-500);
   border-bottom-left-radius: 0.25rem;
 }
+
+/* UX 1 — Markdown sanitizado del asistente: tipografía contenida dentro de la
+   burbuja. El HTML ya viene escapado + reducido a un subconjunto seguro. */
+.mentea-chat-md a { color: var(--mentea-600); text-decoration: underline; }
+.mentea-chat-md strong { font-weight: 700; }
+.mentea-chat-md em { font-style: italic; }
+.mentea-chat-md ul { margin: 0.25rem 0 0.25rem 1.1rem; padding: 0; }
+.mentea-chat-md li { margin: 0.1rem 0; }
+
+/* Estado vacío explícito. */
+.mentea-chat-empty {
+  align-self: center;
+  margin: auto 0;
+  color: var(--slate-400);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+/* Acciones del encabezado (historial + cerrar). */
+.mentea-chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.mentea-chat-icon-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 0 0.15rem;
+}
+.mentea-chat-icon-btn:hover { opacity: 1; }
+
+/* Historial de conversaciones (lista compacta). */
+.mentea-chat-history {
+  border-bottom: 1px solid var(--slate-200);
+  background: #fff;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.mentea-chat-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mentea-gray);
+  border-bottom: 1px solid var(--slate-100, var(--slate-200));
+}
+.mentea-chat-newconv {
+  border: 1px solid var(--mentea-500);
+  background: #fff;
+  color: var(--mentea-600);
+  border-radius: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mentea-chat-newconv:hover { background: var(--slate-50); }
+.mentea-chat-history-empty {
+  padding: 0.75rem 0.8rem;
+  font-size: 0.8rem;
+  color: var(--slate-400);
+  text-align: center;
+}
+.mentea-chat-history-error { color: #b91c1c; }
+.mentea-chat-history-list { list-style: none; margin: 0; padding: 0; }
+.mentea-chat-history-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--slate-100, var(--slate-200));
+}
+.mentea-chat-history-item.is-active { background: var(--slate-50); }
+.mentea-chat-history-open {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.55rem 0.8rem;
+}
+.mentea-chat-history-open:hover { background: var(--slate-50); }
+.mentea-chat-history-title {
+  font-size: 0.85rem;
+  color: var(--mentea-gray);
+  font-weight: 600;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mentea-chat-history-date { font-size: 0.7rem; color: var(--slate-400); }
+.mentea-chat-history-del {
+  background: none;
+  border: none;
+  color: var(--slate-400);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.7rem;
+}
+.mentea-chat-history-del:hover { color: #b91c1c; }
 
 .mentea-chat-typing {
   display: inline-flex;
@@ -987,6 +1111,17 @@ html.dark .mentea-chat-input input {
   border-color: #475569;
   color: #e2e8f0;
 }
+html.dark .mentea-chat-history,
+html.dark .mentea-chat-newconv { background: #0f172a; }
+html.dark .mentea-chat-history-head { color: #e2e8f0; border-color: #334155; }
+html.dark .mentea-chat-history-item,
+html.dark .mentea-chat-history-head { border-color: #334155; }
+html.dark .mentea-chat-history-item.is-active,
+html.dark .mentea-chat-history-open:hover,
+html.dark .mentea-chat-newconv:hover { background: #0b1220; }
+html.dark .mentea-chat-history-title { color: #e2e8f0; }
+html.dark .mentea-chat-newconv { color: #a7f3d0; border-color: #334155; }
+html.dark .mentea-chat-md a { color: #a7f3d0; }
 
 /* ============================================================
    Panel de accesibilidad — botón flotante (abajo-izquierda)

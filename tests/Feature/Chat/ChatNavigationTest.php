@@ -137,5 +137,75 @@ class ChatNavigationTest extends TestCase
         $response->assertSee('name="csrf-token"', false);
         // Etapa 2: el flujo de envío incluye client_message_id en el payload.
         $response->assertSee('client_message_id', false);
+        // UX 1: la ruta de render del asistente usa Markdown sanitizado, no hay
+        // innerHTML crudo; el renderizador está presente.
+        $response->assertSee('renderMarkdown', false);
+    }
+
+    public function test_history_ui_affordances_render_for_authenticated_users(): void
+    {
+        $response = $this->actingAs($this->patient())->get('/');
+
+        $response->assertOk();
+        // La afordancia de historial (lista de conversaciones + nueva) solo se
+        // monta para usuarios autenticados.
+        $response->assertSee('mentea-chat-history', false);
+        $response->assertSee('startNewConversation()', false);
+        $response->assertSee('confirmDelete(', false);
+        // Estados explícitos y Markdown seguro siguen presentes.
+        $response->assertSee('mentea-chat-empty', false);
+        $response->assertSee('renderMarkdown', false);
+    }
+
+    public function test_history_ui_affordances_are_hidden_for_guests(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+        // Los invitados no tienen endpoints de historial: no se renderiza el
+        // panel de la lista ni el botón que lo abre (la función JS existe en el
+        // componente, pero su marcado solo se monta bajo @auth).
+        $response->assertDontSee('mentea-chat-history-list', false);
+        $response->assertDontSee('Ver conversaciones anteriores', false);
+    }
+
+    public function test_store_starts_a_fresh_independent_conversation(): void
+    {
+        Http::fake();
+        $patient = $this->patient();
+
+        // Una conversación previa con contenido.
+        $first = $this->actingAs($patient)
+            ->postJson(route('chat.send'), ['message' => 'Hola'])
+            ->assertOk();
+        $firstId = $first->json('conversation_id');
+
+        // store crea una NUEVA conversación, distinta de la anterior.
+        $created = $this->actingAs($patient)
+            ->postJson(route('chat.conversations.store'), [])
+            ->assertCreated();
+
+        $newId = $created->json('data.id');
+        $this->assertNotNull($newId);
+        $this->assertNotSame($firstId, $newId);
+    }
+
+    public function test_destroy_removes_an_owned_conversation(): void
+    {
+        Http::fake();
+        $patient = $this->patient();
+
+        $send = $this->actingAs($patient)
+            ->postJson(route('chat.send'), ['message' => 'bórrame'])
+            ->assertOk();
+        $conversationId = $send->json('conversation_id');
+
+        $this->actingAs($patient)
+            ->deleteJson(route('chat.conversations.destroy', $conversationId))
+            ->assertOk();
+
+        $this->actingAs($patient)
+            ->getJson(route('chat.conversations.show', $conversationId))
+            ->assertNotFound();
     }
 }
