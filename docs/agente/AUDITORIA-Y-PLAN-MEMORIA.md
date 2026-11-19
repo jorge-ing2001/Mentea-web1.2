@@ -271,3 +271,18 @@ Pruebas siempre con **datos ficticios**, nunca clínicos reales (requisito §11)
 La auditoría (Etapa 1) y el diseño técnico (Etapa 2) están completos y **no se modificó ningún archivo de la aplicación**. Hallazgo clave: el backend **ya persiste** la memoria de conversación en `chat_conversations`/`chat_messages`, pero el frontend **nunca la recupera** y no existen endpoints de lectura; por eso el usuario pierde el hilo al navegar, minimizar o recargar. El plan es **reuse-first**: extender las tablas y servicios existentes, mantener la memoria en Laravel/BD, preservar la abstracción de proveedores y todas las reglas duras de seguridad en PHP.
 
 **La implementación (Etapas 4 a 6) queda a la espera de la aprobación explícita del usuario.** No se ejecutará ningún cambio de código, migración ni frontend hasta recibir esa autorización.
+
+---
+
+## Estado de implementación — Etapas 4 a 6 (rama `feat/chat-persistent-memory`)
+
+Aprobada la implementación, las seis fases se ejecutaron en commits por fase sobre `feat/chat-persistent-memory`:
+
+- **Fase 1 — Persistencia y modelo de datos.** `ALTER chat_conversations` (`title`/`summary`/`context_metadata`/`last_message_at` + índice compuesto), `client_message_id` en `chat_messages`, tabla `chat_user_preferences`, relaciones/scopes y factories. Migraciones reversibles, columnas nuevas `nullable`.
+- **Fase 2 — Repositorio, manager, endpoints + política.** `ConversationRepository`/`ConversationManager`, rutas `index/show/store/update/destroy`, `ChatConversationPolicy`, idempotencia por `client_message_id`.
+- **Fase 3 — Context builder + resumen.** `ConversationContextBuilder` (7 bloques + presupuesto de tokens) y `ConversationSummaryService` con fallback determinista.
+- **Fase 4 — Frontend persistente.** Hidratación desde backend, `localStorage` para id/UI, Markdown sanitizado, estados de carga/vacío/error y confirmación de borrado.
+- **Fase 5 — Memoria de largo plazo.** `chat_user_preferences` + `ConversationMemoryService` con consentimiento y lista blanca de claves/valores no sensibles.
+- **Fase 6 — Validación integral + documentación.** `tests/Feature/Chat/MemoryCompatibilityTest.php` (Ollama vía `Http::fake`, OpenRouter conservado, ruta determinista sin proveedor, recuperación ante 500/timeout/error de conexión). Documentación en `docs/CHAT_AGENT.md` §10-§11 (arquitectura de memoria, endpoints, política/mapa de las 10 reglas, contexto+resumen, independencia de proveedor, e instrucciones de migración/configuración/prueba con el prefijo PHP 8.3).
+
+**Verificación Etapa 6:** suite completa con todas las pruebas del chat en verde y sin fallos nuevos más allá de los ~7 fallos preexistentes ajenos al chat (AppointmentBooking x2, AppointmentCancel, Auth Registration, AvailabilityApi guest, Profile delete, Waitlist). `pint` limpio en los archivos de este trabajo. Pruebas siempre con **datos ficticios**, nunca clínicos reales.

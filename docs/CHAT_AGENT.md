@@ -602,3 +602,239 @@ cupo que el código no ofreció.
 5. Mensajes neutros por privacidad.
 6. El código aplica las reglas; el modelo solo redacta.
 7. Sin API key / sin red: degradación grácil determinista, nunca se cae.
+
+---
+
+## 10. Memoria conversacional persistente (Etapas 4-6)
+
+> Implementado en la rama `feat/chat-persistent-memory` siguiendo el contrato de
+> `docs/agente/AUDITORIA-Y-PLAN-MEMORIA.md`. Hallazgo de la auditoría (Etapa 1):
+> el backend **ya persistía** la conversación en `chat_conversations` /
+> `chat_messages`, pero el frontend **nunca la recuperaba** y no existían
+> endpoints de lectura, de modo que el hilo se perdía al navegar, minimizar o
+> recargar. El diseño (Etapa 2) es **reuse-first**: extender tablas y servicios
+> existentes, mantener la memoria en Laravel/BD y conservar la abstracción de
+> proveedores y todas las reglas duras en PHP.
+
+### 10.1 Las cuatro capas de memoria
+
+| Capa | Dónde vive | Qué guarda |
+|---|---|---|
+| **Conversación** | `chat_messages` (tabla existente) | cada turno `user`/`assistant`/`system`/`tool`, con `meta` (slots ofrecidos, `pending`, flags) |
+| **Sesión** | `localStorage` del navegador + `chat_conversations.session_id` | `conversation_id` activo y estado de UI (abierto, borrador). **Nunca** el historial |
+| **Contextual** | `chat_conversations.summary` + `context_metadata` + ventana reciente | resumen progresivo de los turnos antiguos, metadatos (módulo/tema/flags) y los últimos N mensajes |
+| **Preferencias** | `chat_user_preferences` (tabla nueva) | preferencias de interacción **no sensibles** y **consentidas** (`consented_at`); nunca datos clínicos |
+
+La **BD es la fuente oficial**. `localStorage` es solo apoyo (id activo + UI); al
+montar, el widget hidrata el historial desde el servidor. No se requiere SPA.
+
+### 10.2 Modelo de datos (reutilización + extensión)
+
+`chat_conversations` (tabla existente, **ALTER** reversible, columnas nuevas
+`nullable`): se añadieron `title`, `summary`, `context_metadata` (json),
+`last_message_at`, más el índice compuesto `(user_id, status, last_message_at)`
+para la lista de conversaciones. Se conservan `session_id`,
+`consent_captured_at`, `crisis_flagged_at`, `escalated_at` y `last_activity_at`.
+
+`chat_messages` (tabla existente): se añadió `client_message_id` (`string`
+nullable, único por conversación) para **idempotencia** de reintentos; el resto
+del esquema (`role`, `content`, `meta`) no cambia.
+
+`chat_user_preferences` (tabla nueva): `user_id` (FK `cascadeOnDelete`), `key`,
+`value`, `consented_at` nullable, único `(user_id, key)`.
+
+Relaciones nuevas: `User hasMany ChatConversation` (`chatConversations()`),
+`User hasMany ChatUserPreference`. Scopes en `ChatConversation`: `forUser`,
+`active`, `archived`, `recent` (orden por `last_message_at`).
+
+### 10.3 Servicios provider-independientes
+
+Ninguna lógica de memoria entra en `OllamaProvider` ni en `OpenRouterProvider`:
+ambos reciben solo el arreglo `messages[]` ya construido.
+
+- `ConversationRepository`: consultas CRUD acotadas por usuario (listar, activa,
+  por id con `where user_id`, crear, archivar, eliminar, deduplicar por
+  `client_message_id`).
+- `ConversationManager`: orquesta resolver/crear/cambiar la conversación activa
+  sobre el repositorio; lo usan el controlador y el agente.
+- `ConversationContextBuilder`: extraído de `ChatAgentService::phrase()`; arma
+  `messages[]` en **7 bloques** en orden fijo (§10.5) y respeta el presupuesto
+  de tokens. La cola (instrucción determinista + mensaje actual) se conserva
+  byte a byte para que la guardia anti-alucinación siga operando.
+- `ConversationSummaryService`: genera/actualiza `summary` cuando la
+  conversación supera el umbral, vía `AiProvider` (provider-agnóstico) con
+  **fallback determinista** si no hay proveedor. No re-resume todo cada turno y
+  no toca `meta.pending` del último mensaje del asistente.
+- `ConversationMemoryService`: lee/escribe `chat_user_preferences` con control
+  de consentimiento y lista blanca de claves/valores (`config('chat.preference_keys')`).
+
+### 10.4 Endpoints y rutas
+
+`POST /chat` (`chat.send`) ahora acepta, además de `message`, un
+`conversation_id` opcional y un `client_message_id` para idempotencia. Las
+rutas de gestión viven bajo `middleware(['auth', 'throttle:60,1'])`; cada acción
+resuelve la conversación acotada por `user_id` (anti-IDOR) antes de aplicar la
+política:
+
+| Método | Ruta | Nombre | Acción |
+|---|---|---|---|
+| `POST` | `/chat` | `chat.send` | enviar mensaje (acepta `conversation_id` + `client_message_id`) |
+| `GET` | `/chat/conversations` | `chat.conversations.index` | listar conversaciones del usuario |
+| `POST` | `/chat/conversations` | `chat.conversations.store` | iniciar conversación nueva |
+| `GET` | `/chat/conversations/{conversation}` | `chat.conversations.show` | mensajes de UNA conversación |
+| `PATCH` | `/chat/conversations/{conversation}` | `chat.conversations.update` | renombrar / archivar |
+| `DELETE` | `/chat/conversations/{conversation}` | `chat.conversations.destroy` | eliminación controlada |
+
+El parámetro `{conversation}` está restringido con `whereNumber`. Ninguna ruta
+existente se rompe.
+
+### 10.5 `ChatConversationPolicy` y mapa de las 10 reglas de seguridad
+
+`ChatConversationPolicy` (registrada vía `Gate::policy` en
+`AppServiceProvider::boot()`) exige en **todas** sus habilidades (`view`,
+`update`, `archive`, `delete`, `addMessage`) que `conversation.user_id ===
+user.id`. No concede acceso cruzado a admin/super_admin sobre conversaciones de
+pacientes. Como existe un `Gate::before` global que devuelve `true` para
+super_admin, la defensa real contra IDOR es que los endpoints resuelven la
+conversación **siempre** con `ConversationRepository::findForUser` (scoped
+`where user_id = Auth::id()`): ni siquiera un super_admin puede leer la
+conversación de otro cambiando el id.
+
+| Regla §2.9 | Punto de aplicación |
+|---|---|
+| 1. Solo sus propias conversaciones | `ChatConversationPolicy::view` + scope `where user_id = Auth::id()` en todos los endpoints |
+| 2. Sin IDOR por cambio de id | resolución acotada en `ConversationRepository::findForUser`; binding con `whereNumber` |
+| 3. Pacientes no ven datos de otros | patrón `ChatReadTools` (ignora ids ajenos) + política |
+| 4. Profesionales solo lo autorizado | roles/permisos existentes en `ChatReadTools` |
+| 5. Admins según permisos institucionales | la política NO concede acceso cruzado por defecto |
+| 6. No mezclar conversaciones entre roles/usuarios | clave `user_id` + ausencia de rutas de acceso cruzado |
+| 7. No guardar clínico sensible como memoria permanente | `ConversationMemoryService` filtra a preferencias no sensibles de la lista blanca + `consented_at` |
+| 8. No enviar datos clínicos de terceros al modelo | el context builder solo usa datos del usuario autenticado + RAG público |
+| 9. Validación en servidor, no en frontend | `FormRequest` + política + reglas duras en `ChatAgentService` |
+| 10. Log de seguridad sin contenido clínico | denegaciones registradas con ids/razón, sin `content` |
+
+El agente sigue siendo **solo lectura de orientación**: la memoria **no** amplía
+permisos. Crisis, consentimiento, privacidad y escalado permanecen en PHP e
+independientes del modelo (§3, §8).
+
+### 10.6 Ventana de contexto + resumen (optimizado para qwen3:8b)
+
+`ConversationContextBuilder` arma `messages[]` en 7 bloques y en este orden:
+
+1. prompt del agente (system),
+2. identidad/rol/permisos del usuario autenticado (no sensible),
+3. reglas de seguridad y privacidad,
+4. **resumen** de la conversación (`chat_conversations.summary`),
+5. ventana de los últimos `context_window` mensajes relevantes,
+6. RAG (fragmentos de la base de conocimiento),
+7. instrucción determinista + mensaje actual del usuario (cola conservada byte a byte).
+
+El `recentHistory(12)` fijo se reemplazó por **ventana reciente + resumen**.
+`ConversationSummaryService` condensa los turnos antiguos cuando se superan
+`summary_threshold_messages`, de forma incremental, y guarda el resultado
+(acotado a `summary_max_chars`) en `summary`. Un tope aproximado de caracteres
+(`context_token_budget`) limita el payload total; el constructor recorta
+**primero** la ventana reciente, nunca los bloques de sistema/seguridad. Esto
+reduce la latencia del modelo local y da continuidad temática (un "¿y dónde
+encuentro esa opción?" encuentra el referente en resumen + ventana) sin reenviar
+indefinidamente todo el historial. `meta.pending` del último mensaje del
+asistente se preserva intacto para no romper los seguimientos de cupos.
+
+### 10.7 Independencia de proveedor (Ollama por defecto, OpenRouter conservado)
+
+La memoria es provider-independiente: `OllamaProvider` (por defecto) y
+`OpenRouterProvider` (conservado, inactivo por defecto) reciben el mismo
+`messages[]` ya construido. La compatibilidad se verifica con `Http::fake()` en
+`tests/Feature/Chat/MemoryCompatibilityTest.php`:
+
+- la ruta **Ollama** redacta a través del context builder y publica en
+  `POST {base}/api/chat` (forma `message.content`, sin `Authorization`);
+- **OpenRouter** sigue seleccionable (`config('ai.provider') = 'openrouter'`,
+  forma OpenAI `choices[].message.content` en `/chat/completions`);
+- con el **proveedor no disponible**, la ruta determinista de seguridad
+  (crisis / consentimiento / escalado) gobierna sin tocar el modelo;
+- un **timeout / HTTP 500 / error de conexión** se recupera con gracia: el
+  agente devuelve el texto determinista y nunca propaga un 500.
+
+### 10.8 Claves de configuración (`config/chat.php`)
+
+| Clave | Env | Defecto | Para |
+|---|---|---|---|
+| `context_window` | `CHAT_CONTEXT_WINDOW` | `8` | nº de mensajes recientes en la ventana (reemplaza `history_window=12`) |
+| `summary_threshold_messages` | `CHAT_SUMMARY_THRESHOLD` | `12` | a partir de cuántos mensajes se genera/actualiza el resumen |
+| `summary_enabled` | `CHAT_SUMMARY_ENABLED` | `true` | interruptor del resumen progresivo |
+| `context_token_budget` | `CHAT_CONTEXT_TOKEN_BUDGET` | `8000` | tope aproximado (caracteres) del payload total |
+| `summary_max_chars` | `CHAT_SUMMARY_MAX_CHARS` | `1500` | tope del resumen almacenado |
+| `preference_keys` | — | ver config | lista blanca de preferencias consentibles (`response_length`, `explanation_style`, `preferred_topic`) |
+| `preference_text_max_chars` | `CHAT_PREFERENCE_TEXT_MAX` | `60` | tope para valores de preferencia de texto libre acotado |
+
+El proveedor por defecto sigue siendo `ollama` en `config/ai.php`
+(`AI_PROVIDER=ollama`); `OpenRouter` queda conservado e inactivo.
+
+---
+
+## 11. Ejecución, migración, configuración y pruebas (Etapa 6)
+
+### 11.1 Runtime PHP 8.3 (entorno de sandbox)
+
+El `php` por defecto del sandbox (8.4) está roto (faltan librerías). Prefija
+**todo** comando de php/artisan/pint con el runtime 8.3:
+
+```bash
+LD_LIBRARY_PATH=/inner_container/usr/lib64 \
+PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+php artisan <comando>
+```
+
+En CI (GitHub Actions) PHP 8.3 es nativo y no requiere el prefijo.
+
+### 11.2 Migraciones (reversibles)
+
+Las migraciones de memoria son reversibles y sus columnas nuevas son `nullable`
+para compatibilidad con datos existentes.
+
+```bash
+# Aplicar
+LD_LIBRARY_PATH=/inner_container/usr/lib64 PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+  php artisan migrate
+
+# Revertir el último lote (ALTER chat_conversations, client_message_id,
+# chat_user_preferences)
+LD_LIBRARY_PATH=/inner_container/usr/lib64 PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+  php artisan migrate:rollback
+```
+
+En pruebas se usa `RefreshDatabase` sobre SQLite `:memory:`, por lo que el
+esquema se migra/revierte limpio en cada corrida.
+
+### 11.3 Configuración relevante
+
+- `config/ai.php`: `AI_PROVIDER=ollama` (defecto). Cambiar a OpenRouter solo por
+  `.env` (`AI_PROVIDER=openrouter` + `OPENROUTER_API_KEY`). Ver §0.3-§0.5.
+- `config/chat.php`: ventana/resumen/preferencias (§10.8), timeouts, copys de
+  crisis/consentimiento/escalado, catálogo de servicios, heurística de crisis.
+- `phpunit.xml` fija `AI_PROVIDER=openrouter` para que la batería OpenAI-shaped
+  siga verde con `Http::fake()`; **no editar**. El defecto local/producción es
+  `ollama`.
+
+### 11.4 Ejecutar la suite y el linter
+
+```bash
+# Suite completa
+LD_LIBRARY_PATH=/inner_container/usr/lib64 PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+  php artisan test
+
+# Solo las pruebas del chat
+LD_LIBRARY_PATH=/inner_container/usr/lib64 PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+  php artisan test tests/Feature/Chat tests/Feature/AiProviderTest.php
+
+# Estilo (Laravel Pint)
+LD_LIBRARY_PATH=/inner_container/usr/lib64 PATH=/root/.local/share/mise/installs/php/8.3/bin:$PATH \
+  ./vendor/bin/pint
+```
+
+Todas las pruebas del chat usan **datos ficticios** y `Http::fake()`; ninguna
+llama a un proveedor en vivo (Ollama no es alcanzable en el sandbox). Las
+pruebas de memoria cubren persistencia, navegación, memoria contextual,
+seguridad (aislamiento por usuario, anti-IDOR, deduplicación) y compatibilidad
+de proveedores.
