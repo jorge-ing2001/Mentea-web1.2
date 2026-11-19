@@ -7,6 +7,218 @@
 > Idioma de cara al usuario: **español** (locale `es`). Todo texto visible debe
 > estar en español, neutro y respetuoso de la privacidad.
 
+## 0. Estado de implementación (PR #3)
+
+El agente ya corre sobre una **capa de proveedores desacoplada** con **Ollama
+local** como proveedor por defecto, una capa **ChatReadTools de solo lectura**
+y **RAG** sobre la base de conocimiento institucional. Secciones nuevas:
+
+- [§0.1 Arquitectura de proveedores de IA](#01-arquitectura-de-proveedores-de-ia)
+- [§0.2 Diferencias Ollama vs OpenRouter](#02-diferencias-ollama-vs-openrouter)
+- [§0.3 Configuración y variables de entorno](#03-configuracion-configai-php-y-variables-de-entorno)
+- [§0.4 Ejecución local contra Ollama](#04-ejecucion-local-contra-ollama)
+- [§0.5 Cómo cambiar de Ollama a OpenRouter (y viceversa)](#05-como-cambiar-de-ollama-a-openrouter-y-viceversa)
+- [§0.6 Modelo de solo lectura: ChatReadTools, RAG y enlaces verificados](#06-modelo-de-solo-lectura-chatreadtools-rag-y-enlaces-verificados)
+- [§0.7 Invariantes duros](#07-invariantes-duros)
+
+Las secciones §1–§9 siguientes son el contrato de diseño original; se conservan
+como referencia. Donde el diseño original citaba `OpenRouterClient` como único
+cliente, ahora aplica la capa de proveedores de §0.1 (OpenRouter queda
+conservado como un proveedor más, inactivo por defecto).
+
+### 0.1 Arquitectura de proveedores de IA
+
+El agente ya no depende de un cliente concreto. `ChatAgentService` depende de la
+interfaz `App\Services\Chat\Providers\AiProvider`, y un manager elige la
+implementación activa según `config('ai.provider')`.
+
+```
+ChatAgentService  (orquestador; reglas duras en PHP)
+        │ depende de la interfaz
+        ▼
+AiProvider  (interfaz: chat / classify / isAvailable / name)
+        ▲                         ▲
+        │                         │
+OllamaProvider            OpenRouterProvider
+(local, por defecto)      (de pago, conservado e inactivo)
+        ▲
+        │  selección por config('ai.provider')
+AiProviderManager  (factory; vacío/desconocido -> ollama)
+```
+
+Piezas:
+
+- `app/Services/Chat/Providers/AiProvider.php`: interfaz con
+  `chat(array $messages): ?string`, `classify(string $systemPrompt, string $message): ?string`,
+  `isAvailable(): bool`, `name(): string`.
+- `app/Services/Chat/Providers/OllamaProvider.php`: proveedor local. `POST {base}/api/chat`
+  con cuerpo `{model, messages, stream:false}` y **sin** cabecera de
+  autenticación; lee `message.content`. `isAvailable()` hace ping a
+  `GET {base}/api/tags` (con respaldo `/api/version`). Usa el timeout
+  configurable (`CHAT_HTTP_TIMEOUT`) porque `qwen3:8b` es lento.
+- `app/Services/Chat/Providers/OpenRouterProvider.php`: proveedor de pago
+  (refactor del antiguo `OpenRouterClient`). `POST {base}/chat/completions` con
+  `Authorization: Bearer <key>`; lee `choices.0.message.content`.
+  `isAvailable()` es `true` solo si hay API key.
+- `app/Services/Chat/Providers/AiProviderManager.php`: factory que resuelve el
+  proveedor por `config('ai.provider')`; un valor vacío o desconocido cae a
+  `ollama` para no activar nunca un proveedor de pago por accidente.
+- `app/Services/Chat/OpenRouterClient.php`: **conservado** como subclase fina
+  de `OpenRouterProvider` (no se eliminó); las referencias y tests que
+  type-hintean `OpenRouterClient` siguen funcionando.
+- `app/Providers/AppServiceProvider.php`: `register()` enlaza
+  `AiProvider::class` al proveedor que elige el manager.
+
+Ambos proveedores usan `Illuminate\Support\Facades\Http`, así que `Http::fake()`
+funciona en tests y ninguna prueba toca la red real. Ante timeout, HTTP 500,
+error de conexión o respuesta inparseable, cada proveedor devuelve `null` (no
+lanza excepción) y el orquestador cae a su ruta determinista.
+
+### 0.2 Diferencias Ollama vs OpenRouter
+
+| Aspecto | Ollama (por defecto) | OpenRouter (conservado, inactivo) |
+|---|---|---|
+| Endpoint de chat | `POST {base}/api/chat` | `POST {base}/chat/completions` |
+| Autenticación | **Ninguna** (local, sin key) | `Authorization: Bearer <OPENROUTER_API_KEY>` |
+| Cuerpo clave | `{model, messages, stream:false}` | `{model, messages}` (formato OpenAI) |
+| Lectura de la respuesta | `message.content` | `choices.0.message.content` |
+| `isAvailable()` | ping a `GET {base}/api/tags` (respaldo `/api/version`) | hay API key presente |
+| Modelo por defecto | `qwen3:8b` | `openai/gpt-4o-mini` |
+| Base URL por defecto | `http://localhost:11434` | `https://openrouter.ai/api/v1` |
+| Costo / red | gratuito, local | de pago, nube |
+
+### 0.3 Configuración (`config/ai.php`) y variables de entorno
+
+`config/ai.php` es la fuente única de selección de proveedor:
+
+```php
+return [
+    'provider' => env('AI_PROVIDER', 'ollama'),
+    'ollama' => [
+        'base_url'     => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
+        'model'        => env('OLLAMA_MODEL', 'qwen3:8b'),
+        'endpoint'     => '/api/chat',
+        'timeout'      => (int) env('CHAT_HTTP_TIMEOUT', 20),
+        'ping_timeout' => (int) env('OLLAMA_PING_TIMEOUT', 3),
+    ],
+    'openrouter' => [
+        'key'      => env('OPENROUTER_API_KEY'),
+        'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+        'model'    => env('OPENROUTER_MODEL', 'openai/gpt-4o-mini'),
+    ],
+];
+```
+
+El bloque `openrouter` lee las **mismas** variables `OPENROUTER_*` que
+`config/services.php`; no se duplica la fuente de credenciales.
+
+| Variable | Para | Valor por defecto |
+|---|---|---|
+| `AI_PROVIDER` | proveedor activo (`ollama` \| `openrouter`) | `ollama` |
+| `OLLAMA_BASE_URL` | URL del Ollama local | `http://localhost:11434` |
+| `OLLAMA_MODEL` | modelo local | `qwen3:8b` |
+| `OLLAMA_PING_TIMEOUT` | timeout corto del ping `isAvailable()` (s) | `3` |
+| `CHAT_HTTP_TIMEOUT` | timeout de la llamada de chat (s) | `20` |
+| `OPENROUTER_API_KEY` | key de OpenRouter (solo si se usa ese proveedor) | *(vacío)* |
+| `OPENROUTER_MODEL` | modelo de OpenRouter | `openai/gpt-4o-mini` |
+| `OPENROUTER_BASE_URL` | base URL de OpenRouter | `https://openrouter.ai/api/v1` |
+
+`.env.example` y `.env.production.example` traen `AI_PROVIDER=ollama`,
+`OLLAMA_BASE_URL`, `OLLAMA_MODEL=qwen3:8b`, y mantienen `OPENROUTER_API_KEY`
+**vacío**.
+
+> Nota de pruebas: `phpunit.xml` fija `AI_PROVIDER=openrouter` para que la
+> batería de tests del chat (que usa `Http::fake()` con respuestas de forma
+> OpenAI) siga verde sin cambios. El valor por defecto en local y producción es
+> `ollama`.
+
+### 0.4 Ejecución local contra Ollama
+
+1. Instala y arranca Ollama en tu PC y descarga el modelo:
+   `ollama pull qwen3:8b` (se sirve en `http://localhost:11434`).
+2. En `.env`: `AI_PROVIDER=ollama`, `OLLAMA_BASE_URL=http://localhost:11434`,
+   `OLLAMA_MODEL=qwen3:8b`. Deja `OPENROUTER_API_KEY` vacío.
+3. `php artisan config:clear` y levanta la app con `php artisan serve`.
+4. Abre el widget de chat y conversa.
+
+`qwen3:8b` es un modelo local y puede **tardar** varios segundos por turno. Si
+ves timeouts, sube `CHAT_HTTP_TIMEOUT` (p. ej. `CHAT_HTTP_TIMEOUT=120`) y el
+`max_execution_time` de PHP para `php artisan serve`
+(`php -d max_execution_time=180 artisan serve`). Si Ollama está apagado o no
+responde, el agente **no se cae**: usa su ruta determinista de seguridad (ver
+§0.7), claramente distinguible de una respuesta del modelo.
+
+### 0.5 Cómo cambiar de Ollama a OpenRouter (y viceversa)
+
+Sin tocar código, solo `.env`:
+
+- **A OpenRouter:** fija `AI_PROVIDER=openrouter` y provee una
+  `OPENROUTER_API_KEY` válida (ver `docs/ACTIVAR_IA.md`). Ejecuta
+  `php artisan config:clear`. `OpenRouterProvider::isAvailable()` solo es `true`
+  con key presente; sin key, el agente cae a la ruta determinista.
+- **De vuelta a Ollama:** fija `AI_PROVIDER=ollama` (o deja la variable vacía;
+  cualquier valor desconocido también cae a `ollama`) y
+  `php artisan config:clear`.
+
+La API key **nunca** va en código, en `.env.example` ni en commits; vive solo en
+el `.env` local, que está en `.gitignore`.
+
+### 0.6 Modelo de solo lectura: ChatReadTools, RAG y enlaces verificados
+
+El agente es de **solo lectura**: orienta, enseña y consulta información
+autorizada, pero **nunca ejecuta escrituras**. Las operaciones (agendar,
+cancelar, reprogramar, gestionar usuarios/roles/horarios) ocurren únicamente por
+los módulos legítimos de Laravel; el agente explica el procedimiento y entrega
+un enlace interno verificado para que **el usuario** lo realice.
+
+- `app/Services/Chat/ChatReadTools.php`: solo métodos de lectura (getters /
+  SELECT). No expone `book/cancel/reschedule/confirmOffer` ni abre
+  transacciones de escritura. La identidad proviene de `Auth::user()` /
+  `Auth::id()`, **nunca** de un id en el texto del usuario ni del modelo. Las
+  consultas personales están forzadas al usuario autenticado: un id ajeno
+  devuelve vacío, nunca datos de otro paciente. Las herramientas de
+  administración están gateadas por rol (spatie / enum `role`).
+- `app/Services/Chat/KnowledgeBase.php` (RAG): carga
+  `docs/agente/base-conocimiento.csv` en tiempo de ejecución (ruta configurable
+  vía `chat.knowledge_base_path`) y recupera **3 a 6** fragmentos relevantes por
+  turno (coincidencia insensible a acentos), que se inyectan como bloque de
+  "conocimiento verificado" en el prompt. Nunca se vuelca el CSV completo. La
+  base de conocimiento se edita por CSV, sin tocar código.
+- `app/Services/Chat/ChatLinks.php`: mapea intenciones a **rutas nombradas
+  reales** de `routes/web.php` (verificadas con `Route::has`); nunca inventa
+  URLs. Cubre rutas de paciente, profesional, administración y super.
+
+Seguridad por rol (identidad = Laravel, no el modelo): paciente ve solo lo
+suyo; profesional ve su propia agenda; administración según permisos. Un intento
+de "dame las citas del paciente X" o de manipular ids se ignora y se responde
+solo con lo que el rol puede ver.
+
+> Tensión honesta (aditivo): por invariante del encargo de no desactivar los
+> tests existentes, la capa transaccional previa (`ChatTools` y el flujo de
+> reserva/cancelación/reprogramación de `ChatAgentService`) se **conservó
+> intacta** junto a la nueva capa de solo lectura, en vez de eliminarse. La
+> rama de orientación de solo lectura se activa ante frases de tipo "cómo /
+> dónde"; los comandos transaccionales directos siguen enrutando al flujo
+> existente. Esto es una diferencia conocida frente a `PLAN-SOLO-LECTURA.md`
+> (que pide un agente estrictamente de solo lectura) y queda para revisión del
+> orquestador.
+
+### 0.7 Invariantes duros
+
+1. El proveedor por defecto es **Ollama**; nunca se activa un proveedor de pago
+   por accidente (valor vacío/desconocido de `AI_PROVIDER` cae a `ollama`).
+2. **OpenRouter se conserva** (refactorizado a proveedor), inactivo por defecto;
+   no se eliminó.
+3. Las **API keys nunca** aparecen en código ni en logs; solo en el `.env`
+   local (gitignored).
+4. El modelo **nunca** ejecuta SQL ni muta registros; solo recibe texto ya
+   consultado y autorizado por PHP (solo lectura vía `ChatReadTools`).
+5. Cuando el proveedor está caído o devuelve `null`, el agente responde con una
+   **ruta determinista de seguridad** claramente distinguible, sin simular una
+   respuesta de IA. Crisis, consentimiento y permisos siguen operando.
+
+---
+
 ## 1. Objetivo y alcance
 
 Agente conversacional embebido en la propia web Laravel de Mentea (hospital de

@@ -168,4 +168,25 @@ Poder conversar desde la plataforma y comprobar: comprende Mentea y sus funcione
 
 - ✅ **Fase 1 (Auditoría)** y **Fase 2 (Diseño técnico)** entregadas aquí.
 - ✅ **Base de conocimiento** actualizada y corregida (UTF-8) en `docs/agente/base-conocimiento.csv` (45 entradas, Hospital Especializado Granja Integral de Lérida, Tolima).
-- ⏭️ **Fases 3–8 (implementación):** pendientes de ejecutar por el agente planificador/implementador, siguiendo este plan y verificando cada cambio antes de darlo por terminado.
+- ✅ **Fase 3 (Integración local):** capa de proveedores desacoplada implementada.
+  `AiProvider` + `OllamaProvider` + `OpenRouterProvider` + `AiProviderManager` en
+  `app/Services/Chat/Providers/`; `config/ai.php` (proveedor por defecto `ollama`);
+  binding en `AppServiceProvider`; `ChatAgentService` depende de la interfaz
+  `AiProvider`; `.env.example`/`.env.production.example` con `AI_PROVIDER`,
+  `OLLAMA_*`. OpenRouter conservado como proveedor (inactivo por defecto).
+- ✅ **Fase 4 (Conocimiento):** RAG ligero en `app/Services/Chat/KnowledgeBase.php`
+  sobre `docs/agente/base-conocimiento.csv` (3–6 fragmentos por turno, insensible a
+  acentos, editable por CSV); inyección de "conocimiento verificado" en el prompt.
+- ✅ **Fase 5 (Agente por rol):** `app/Services/Chat/ChatReadTools.php` (solo
+  lectura, autorización por herramienta con `Auth`/roles) y `ChatLinks.php`
+  (enlaces internos verificados con `Route::has`). Nota: la capa transaccional
+  previa se mantuvo **intacta de forma aditiva** para no desactivar tests
+  existentes (ver `PLAN-SOLO-LECTURA.md`).
+- ✅ **Fase 6 (Interfaz):** ajuste fino del widget sin rediseño (indicador de
+  proveedor solo para desarrollo, `APP_DEBUG`).
+- ✅ **Fase 7 (Pruebas):** `tests/Feature/Chat/*` con `Http::fake()` (providers,
+  RAG, matriz de seguridad de `ChatReadTools`, solo-lectura, crisis con proveedor
+  caído); sin red real ni datos reales de pacientes.
+- ✅ **Fase 8 (Documentación):** `docs/CHAT_AGENT.md` §0 (arquitectura de
+  proveedores, diferencias, `config/ai.php`, variables, ejecución local, cómo
+  cambiar de proveedor, modelo de solo lectura e invariantes).

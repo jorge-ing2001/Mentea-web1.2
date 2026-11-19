@@ -95,4 +95,27 @@ Si Ollama no responde: respuestas **deterministas de seguridad** claramente dist
 ## 10. Estado
 
 - ✅ Plan de solo lectura (este documento) y contrato de herramientas (`CONTRATO-CHATREADTOOLS.md`) entregados.
-- ⏭️ Implementación por fases pendiente de delegar al planificador/implementador, siguiendo este plan y verificando cada cambio (incluida la matriz de pruebas de seguridad).
+- ✅ **Capa de solo lectura implementada:** `app/Services/Chat/ChatReadTools.php`
+  (solo getters/SELECT; identidad por `Auth`, nunca por el modelo; consultas
+  personales forzadas a `Auth::id()`; herramientas de administración gateadas por
+  rol) y `app/Services/Chat/ChatLinks.php` (enlaces internos verificados con
+  `Route::has`).
+- ✅ **RAG conservado:** `app/Services/Chat/KnowledgeBase.php` sobre
+  `docs/agente/base-conocimiento.csv` (3–6 fragmentos por turno, insensible a
+  acentos); nunca se vuelca el CSV completo.
+- ✅ **Prompt del sistema** adaptado a la filosofía de solo lectura (§8) en
+  `config/chat.php`.
+- ✅ **Proveedor Ollama activo** por defecto (`config/ai.php`); OpenRouter
+  conservado e inactivo. Fallo del modelo → respuestas deterministas de seguridad
+  (§9), con crisis/consentimiento/permisos operando igual.
+- ✅ **Matriz de pruebas de seguridad** implementada en `tests/Feature/Chat/`
+  (aislamiento paciente/profesional, gateo por rol, intentos de evasión, no
+  inventar, crisis con proveedor caído).
+- ⚠️ **Diferencia honesta (aditivo):** por el invariante de no desactivar los
+  tests existentes, la capa transaccional previa (`ChatTools` y el flujo de
+  reserva/cancelación/reprogramación de `ChatAgentService`) **no se eliminó**; se
+  mantuvo intacta junto a la capa de solo lectura. La orientación de solo lectura
+  se activa ante frases de tipo "cómo / dónde"; los comandos transaccionales
+  directos siguen enrutando al flujo existente. Esto se aparta del objetivo de
+  "retirar del agente las herramientas transaccionales" (§3/§7) y queda marcado
+  para revisión del orquestador.

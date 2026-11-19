@@ -1,3 +1,50 @@
+# Activar y probar el agente (Ollama local u OpenRouter)
+
+El agente usa una capa de proveedores desacoplada: el proveedor por defecto es
+**Ollama** (local, gratuito) y **OpenRouter** (de pago) queda conservado e
+inactivo. El proveedor activo se elige con `AI_PROVIDER` en `.env`. La
+arquitectura completa esta en `docs/CHAT_AGENT.md` (seccion 0).
+
+## 0. Ejecutar con Ollama local (por defecto)
+
+1. Instala Ollama en tu PC y descarga el modelo:
+
+   ```bash
+   ollama pull qwen3:8b
+   ```
+
+   Ollama queda sirviendo en `http://localhost:11434`.
+
+2. En `.env`:
+
+   ```env
+   AI_PROVIDER=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=qwen3:8b
+   # Deja OPENROUTER_API_KEY vacio cuando uses Ollama.
+   ```
+
+3. Aplica la configuracion y levanta la app:
+
+   ```bash
+   php artisan config:clear
+   npm install && npm run build
+   php artisan serve
+   ```
+
+> NOTA DE RENDIMIENTO: `qwen3:8b` es un modelo local y puede **tardar** varios
+> segundos por turno. Si ves cortes por tiempo, sube `CHAT_HTTP_TIMEOUT` (por
+> ejemplo `CHAT_HTTP_TIMEOUT=120`) y el `max_execution_time` de PHP al servir:
+> `php -d max_execution_time=180 artisan serve`. Si Ollama esta apagado, el
+> agente NO se cae: responde en modo determinista de seguridad, distinguible de
+> una respuesta del modelo.
+
+Para cambiar de proveedor sin tocar codigo basta con `AI_PROVIDER` y
+`php artisan config:clear` (ver seccion 0.5 de `docs/CHAT_AGENT.md`). El resto de
+esta guia cubre el proveedor de pago OpenRouter.
+
+---
+
 # Activar y probar el agente con OpenRouter (API key)
 
 Esta guia muestra como cargar tu API key de OpenRouter para activar la
